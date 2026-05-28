@@ -48,3 +48,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }
+export async function DELETE(request: NextRequest) {
+  try {
+    const { id } = await request.json()
+    await base('Contato').destroy(id)
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  }
+}

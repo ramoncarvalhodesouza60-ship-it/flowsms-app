@@ -36,6 +36,30 @@ export default function Home() {
     const res = await fetch('/api/contatos?empresa=' + encodeURIComponent(empresaAtual))
     const data = await res.json()
     if (data.success) setContatos(data.contatos)
+  } async function deletarContato(id: string) {
+    await fetch('/api/contatos', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    })
+    carregarContatos()
+  }
+  async function importarCSV(arquivo: File) {
+    const texto = await arquivo.text()
+    const linhas = texto.split('\n').filter(l => l.trim())
+    for (const linha of linhas.slice(1)) {
+      const partes = linha.split(',')
+      const nome = partes[0]?.trim().replace(/"/g, '')
+      const telefone = partes[1]?.trim().replace(/"/g, '')
+      if (nome && telefone) {
+        await fetch('/api/contatos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nome, telefone, empresa: empresaAtual })
+        })
+      }
+    }
+    carregarContatos()
   }
 
   useEffect(() => {
@@ -156,6 +180,7 @@ export default function Home() {
               {enviando ? 'Enviando...' : '📨 Disparar SMS'}
             </button>
             <button onClick={dispararParaTodos} disabled={enviando} style={{ width: '100%', padding: '14px', background: enviando ? '#555' : '#1a1a1a', color: '#FF6B00', border: '1px solid #FF6B00', borderRadius: '8px', fontSize: '16px', fontWeight: '700', cursor: enviando ? 'not-allowed' : 'pointer', marginTop: '10px' }}>
+
               {enviando ? 'Enviando...' : '🚀 Disparar para Todos os Contatos'}
             </button>
           </div>
@@ -171,6 +196,13 @@ export default function Home() {
                 {adicionando ? '...' : '+ Adicionar'}
               </button>
             </div>
+            <div style={{ marginTop: '12px' }}>
+              <label style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', padding: '10px 16px', color: '#aaa', fontSize: '13px', cursor: 'pointer', display: 'inline-block' }}>
+                📁 Importar CSV
+                <input type="file" accept=".csv" onChange={e => e.target.files && importarCSV(e.target.files[0])} style={{ display: 'none' }} />
+              </label>
+              <p style={{ color: '#555', fontSize: '11px', marginTop: '6px' }}>Formato: Nome, Telefone (uma por linha)</p>
+            </div>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #222' }}>
@@ -185,6 +217,11 @@ export default function Home() {
                     <td style={{ padding: '12px', color: 'white', fontSize: '14px' }}>{c.nome}</td>
                     <td style={{ padding: '12px', color: '#aaa', fontSize: '14px' }}>{c.telefone}</td>
                     <td style={{ padding: '12px' }}><span style={{ background: '#FF6B0022', color: '#FF6B00', padding: '3px 10px', borderRadius: '20px', fontSize: '11px' }}>{c.status || 'Aguardando'}</span></td>
+                    <td style={{ padding: '12px' }}>
+                      <button onClick={() => deletarContato(c.id)} style={{ background: 'transparent', color: '#f38ba8', border: '1px solid #f38ba822', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
+                        Deletar
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

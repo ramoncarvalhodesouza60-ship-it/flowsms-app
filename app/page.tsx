@@ -36,6 +36,13 @@ export default function Home() {
     const res = await fetch('/api/contatos?empresa=' + encodeURIComponent(empresaAtual))
     const data = await res.json()
     if (data.success) setContatos(data.contatos)
+  } async function deletarContato(id: string) {
+    await fetch('/api/contatos', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    })
+    carregarContatos()
   }
 
   useEffect(() => {
@@ -156,6 +163,7 @@ export default function Home() {
               {enviando ? 'Enviando...' : '📨 Disparar SMS'}
             </button>
             <button onClick={dispararParaTodos} disabled={enviando} style={{ width: '100%', padding: '14px', background: enviando ? '#555' : '#1a1a1a', color: '#FF6B00', border: '1px solid #FF6B00', borderRadius: '8px', fontSize: '16px', fontWeight: '700', cursor: enviando ? 'not-allowed' : 'pointer', marginTop: '10px' }}>
+
               {enviando ? 'Enviando...' : '🚀 Disparar para Todos os Contatos'}
             </button>
           </div>
@@ -185,6 +193,11 @@ export default function Home() {
                     <td style={{ padding: '12px', color: 'white', fontSize: '14px' }}>{c.nome}</td>
                     <td style={{ padding: '12px', color: '#aaa', fontSize: '14px' }}>{c.telefone}</td>
                     <td style={{ padding: '12px' }}><span style={{ background: '#FF6B0022', color: '#FF6B00', padding: '3px 10px', borderRadius: '20px', fontSize: '11px' }}>{c.status || 'Aguardando'}</span></td>
+                    <td style={{ padding: '12px' }}>
+                      <button onClick={() => deletarContato(c.id)} style={{ background: 'transparent', color: '#f38ba8', border: '1px solid #f38ba822', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
+                        Deletar
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

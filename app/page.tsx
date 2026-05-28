@@ -44,6 +44,23 @@ export default function Home() {
     })
     carregarContatos()
   }
+  async function importarCSV(arquivo: File) {
+    const texto = await arquivo.text()
+    const linhas = texto.split('\n').filter(l => l.trim())
+    for (const linha of linhas.slice(1)) {
+      const partes = linha.split(',')
+      const nome = partes[0]?.trim().replace(/"/g, '')
+      const telefone = partes[1]?.trim().replace(/"/g, '')
+      if (nome && telefone) {
+        await fetch('/api/contatos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nome, telefone, empresa: empresaAtual })
+        })
+      }
+    }
+    carregarContatos()
+  }
 
   useEffect(() => {
     if (logado) carregarContatos()
@@ -178,6 +195,13 @@ export default function Home() {
               <button onClick={adicionarContato} disabled={adicionando} style={{ padding: '12px 20px', background: '#FF6B00', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', whiteSpace: 'nowrap' }}>
                 {adicionando ? '...' : '+ Adicionar'}
               </button>
+            </div>
+            <div style={{ marginTop: '12px' }}>
+              <label style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', padding: '10px 16px', color: '#aaa', fontSize: '13px', cursor: 'pointer', display: 'inline-block' }}>
+                📁 Importar CSV
+                <input type="file" accept=".csv" onChange={e => e.target.files && importarCSV(e.target.files[0])} style={{ display: 'none' }} />
+              </label>
+              <p style={{ color: '#555', fontSize: '11px', marginTop: '6px' }}>Formato: Nome, Telefone (uma por linha)</p>
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>

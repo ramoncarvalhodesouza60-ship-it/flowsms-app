@@ -21,6 +21,7 @@ export default function Home() {
   const [novoTel, setNovoTel] = useState('')
   const [adicionando, setAdicionando] = useState(false)
   const [abaAtiva, setAbaAtiva] = useState('sms')
+  const [filtroStatus, setFiltroStatus] = useState('Todos')
 
   function entrar() {
     const encontrada = empresas.find(e => e.email === email && e.senha === senha)
@@ -204,7 +205,13 @@ export default function Home() {
               <p style={{ color: '#555', fontSize: '11px', marginTop: '6px' }}>Formato: Nome, Telefone (uma por linha)</p>
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
+              <thead> <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', marginTop: '16px', flexWrap: 'wrap' }}>
+                {['Todos', 'Aguardando retorno', 'Convertido', 'Não interessado'].map(filtro => (
+                  <button key={filtro} onClick={() => setFiltroStatus(filtro)} style={{ padding: '6px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600', background: filtroStatus === filtro ? '#FF6B00' : '#1a1a1a', color: filtroStatus === filtro ? 'white' : '#666' }}>
+                    {filtro}
+                  </button>
+                ))}
+              </div>
                 <tr style={{ borderBottom: '1px solid #222' }}>
                   {['Nome', 'Telefone', 'Status'].map(h => <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', color: '#555', textTransform: 'uppercase' }}>{h}</th>)}
                 </tr>
@@ -212,7 +219,7 @@ export default function Home() {
               <tbody>
                 {contatos.length === 0 ? (
                   <tr><td colSpan={3} style={{ padding: '20px', textAlign: 'center', color: '#555', fontSize: '14px' }}>Nenhum contato ainda</td></tr>
-                ) : contatos.map(c => (
+                ) : contatos.filter((c: any) => filtroStatus === 'Todos' || c.status === filtroStatus).map(c => (
                   <tr key={c.id} style={{ borderBottom: '1px solid #161616' }}>
                     <td style={{ padding: '12px', color: 'white', fontSize: '14px' }}>{c.nome}</td>
                     <td style={{ padding: '12px', color: '#aaa', fontSize: '14px' }}>{c.telefone}</td>

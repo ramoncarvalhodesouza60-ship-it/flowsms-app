@@ -1,69 +1,54 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from "next/server"
+import Airtable from "airtable"
 
-const Airtable = require('airtable')
-const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
+const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID!)
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const empresa = request.nextUrl.searchParams.get('empresa') || ''
     const records: any[] = []
     await new Promise<void>((resolve, reject) => {
-      const filtro = empresa ? 'empresa = "' + empresa + '"' : ''
-      const opcoes: any = { maxRecords: 100 }
-      if (filtro) opcoes.filterByFormula = '{empresa} = "' + empresa + '"'
-      base('Contato').select(opcoes).eachPage(
+      base("Contato").select({ maxRecords: 100 }).eachPage(
         (pageRecords: any[], fetchNextPage: () => void) => {
           pageRecords.forEach((record: any) => {
-            records.push({
-              id: record.id,
-              nome: record.get('Name'),
-              telefone: record.get('Phone'),
-              status: record.get('Status'),
-              smsEnviado: record.get('SMS Enviados'),
-              empresa: record.get('empresa'),
-            })
+            records.push({ id: record.id, nome: record.get("Name"), telefone: record.get("Phone"), status: record.get("Status"), smsEnviado: record.get("SMS Enviados") })
           })
           fetchNextPage()
         },
-        (err: any) => { if (err) reject(err); else resolve() }
+        (err: any) => { err ? reject(err) : resolve() }
       )
     })
-    return NextResponse.json({ success: true, contatos: records })
+    return NextResponse.json(records)
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const { nome, telefone, empresa } = await request.json()
-    const record = await base('Contato').create({
-      'Name': nome,
-      'Phone': telefone,
-      'Status': 'Aguardando retorno',
-      'empresa': empresa
-    })
+    const { nome, telefone } = await request.json()
+    const record = await base("Contato").create({ "Name": nome, "Phone": telefone, "Status": "Aguardando retorno" })
     return NextResponse.json({ success: true, id: record.id })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
-export async function DELETE(request: NextRequest) {
-  try {
-    const { id } = await request.json()
-    await base('Contato').destroy(id)
-    return NextResponse.json({ success: true })
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
-  }
-} export async function PATCH(request: NextRequest) {
+
+export async function PATCH(request: Request) {
   try {
     const { id, status } = await request.json()
-    await base('Contato').update(id, {
-      'Status': status
-    })
+    await base("Contato").update(id, { "Status": status })
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { id } = await request.json()
+    await base("Contato").destroy(id)
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

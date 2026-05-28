@@ -36,7 +36,7 @@ export default function Home() {
   async function carregarContatos() {
     const res = await fetch('/api/contatos?empresa=' + encodeURIComponent(empresaAtual))
     const data = await res.json()
-    if (data.success) setContatos(data.contatos)
+    if (Array.isArray(data)) setContatos(data)
   } async function atualizarStatus(id: string, status: string) {
     await fetch('/api/contatos', {
       method: 'PATCH',

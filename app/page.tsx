@@ -37,7 +37,15 @@ export default function Home() {
     const res = await fetch('/api/contatos?empresa=' + encodeURIComponent(empresaAtual))
     const data = await res.json()
     if (data.success) setContatos(data.contatos)
-  } async function deletarContato(id: string) {
+  } async function atualizarStatus(id: string, status: string) {
+    await fetch('/api/contatos', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status })
+    })
+    carregarContatos()
+  }
+  async function deletarContato(id: string) {
     await fetch('/api/contatos', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
@@ -226,6 +234,14 @@ export default function Home() {
                     <td style={{ padding: '12px' }}><span style={{ background: '#FF6B0022', color: '#FF6B00', padding: '3px 10px', borderRadius: '20px', fontSize: '11px' }}>{c.status || 'Aguardando'}</span></td>
                     <td style={{ padding: '12px' }}>
                       <button onClick={() => deletarContato(c.id)} style={{ background: 'transparent', color: '#f38ba8', border: '1px solid #f38ba822', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
+                        <td style={{ padding: '12px' }}>
+                          <select onChange={e => atualizarStatus(c.id, e.target.value)} value={c.status || 'Aguardando retorno'} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '6px', color: 'white', padding: '4px 8px', fontSize: '12px', cursor: 'pointer' }}>
+                            <option>Aguardando retorno</option>
+                            <option>Convertido</option>
+                            <option>Não interessado</option>
+                            <option>Sem resposta</option>
+                          </select>
+                        </td>
                         Deletar
                       </button>
                     </td>

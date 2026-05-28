@@ -43,7 +43,7 @@ export default function Home() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, status })
     })
-    carregarContatos()
+    setTimeout(() => carregarContatos(), 1000)
   }
   async function deletarContato(id: string) {
     await fetch('/api/contatos', {

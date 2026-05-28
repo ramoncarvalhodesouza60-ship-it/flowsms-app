@@ -212,14 +212,15 @@ export default function Home() {
               </label>
               <p style={{ color: '#555', fontSize: '11px', marginTop: '6px' }}>Formato: Nome, Telefone (uma por linha)</p>
             </div>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', marginTop: '16px', flexWrap: 'wrap' }}>
+              {['Todos', 'Aguardando retorno', 'Convertido', 'Não interessado'].map(filtro => (
+                <button key={filtro} onClick={() => setFiltroStatus(filtro)} style={{ padding: '6px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600', background: filtroStatus === filtro ? '#FF6B00' : '#1a1a1a', color: filtroStatus === filtro ? 'white' : '#666' }}>
+                  {filtro}
+                </button>
+              ))}
+            </div>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead> <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', marginTop: '16px', flexWrap: 'wrap' }}>
-                {['Todos', 'Aguardando retorno', 'Convertido', 'Não interessado'].map(filtro => (
-                  <button key={filtro} onClick={() => setFiltroStatus(filtro)} style={{ padding: '6px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600', background: filtroStatus === filtro ? '#FF6B00' : '#1a1a1a', color: filtroStatus === filtro ? 'white' : '#666' }}>
-                    {filtro}
-                  </button>
-                ))}
-              </div>
+              <thead>
                 <tr style={{ borderBottom: '1px solid #222' }}>
                   {['Nome', 'Telefone', 'Status'].map(h => <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', color: '#555', textTransform: 'uppercase' }}>{h}</th>)}
                 </tr>

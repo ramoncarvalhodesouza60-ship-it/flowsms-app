@@ -213,7 +213,7 @@ export default function Home() {
               <p style={{ color: '#555', fontSize: '11px', marginTop: '6px' }}>Formato: Nome, Telefone (uma por linha)</p>
             </div>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', marginTop: '16px', flexWrap: 'wrap' }}>
-              {['Todos', 'Aguardando retorno', 'Convertido', 'Não interessado'].map(filtro => (
+              {['Todos', 'Aguardando retorno', 'Não interessado'].map(filtro => (
                 <button key={filtro} onClick={() => setFiltroStatus(filtro)} style={{ padding: '6px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600', background: filtroStatus === filtro ? '#FF6B00' : '#1a1a1a', color: filtroStatus === filtro ? 'white' : '#666' }}>
                   {filtro}
                 </button>

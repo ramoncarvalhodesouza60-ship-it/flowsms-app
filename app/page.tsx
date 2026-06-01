@@ -236,7 +236,7 @@ export default function Home() {
                     <td style={{ padding: '12px' }}>
                       <select onChange={e => atualizarStatus(c.id, e.target.value)} defaultValue={c.status || 'Aguardando retorno'} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '6px', color: 'white', padding: '4px 8px', fontSize: '12px', cursor: 'pointer' }}>
                         <option>Aguardando retorno</option>
-                        <option>Convertido</option>
+
                         <option>Não interessado</option>
                         <option>Sem resposta</option>
                       </select>

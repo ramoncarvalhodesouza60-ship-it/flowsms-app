@@ -1,10 +1,85 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 const empresas = [
   { email: 'admin@flowsms.com', senha: '123456', empresa: 'FlowSMS Admin' },
   { email: 'nycollas@empresa.com', senha: 'nycollas123', empresa: 'Empresa Nycollas' },
 ]
+
+const statusColors: Record<string, { bg: string; color: string; dot: string }> = {
+  'Aguardando retorno': { bg: 'rgba(249,226,175,0.12)', color: '#f9e2af', dot: '#f9e2af' },
+  'Não interessado': { bg: 'rgba(243,139,168,0.12)', color: '#f38ba8', dot: '#f38ba8' },
+  'Sem resposta': { bg: 'rgba(108,117,125,0.12)', color: '#888', dot: '#888' },
+  'Convertido': { bg: 'rgba(166,227,161,0.12)', color: '#a6e3a1', dot: '#a6e3a1' },
+}
+
+const G = `
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Space+Mono:wght@700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#070709;font-family:'Plus Jakarta Sans',sans-serif;}
+.orb{position:fixed;border-radius:50%;filter:blur(80px);opacity:.13;pointer-events:none;z-index:0;}
+.orb1{width:520px;height:520px;background:radial-gradient(circle,#FF6B00,transparent);top:-120px;left:-120px;animation:f1 9s ease-in-out infinite;}
+.orb2{width:420px;height:420px;background:radial-gradient(circle,#ff4500,transparent);bottom:-100px;right:-80px;animation:f2 11s ease-in-out infinite;}
+.orb3{width:320px;height:320px;background:radial-gradient(circle,#ff8c33,transparent);top:50%;left:55%;transform:translate(-50%,-50%);animation:f3 7s ease-in-out infinite;}
+@keyframes f1{0%,100%{transform:translate(0,0)}40%{transform:translate(40px,-40px)}70%{transform:translate(-20px,30px)}}
+@keyframes f2{0%,100%{transform:translate(0,0)}35%{transform:translate(-30px,30px)}65%{transform:translate(25px,-20px)}}
+@keyframes f3{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.15)}}
+.grid-bg{position:fixed;inset:0;background-image:linear-gradient(rgba(255,107,0,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,107,0,.025) 1px,transparent 1px);background-size:60px 60px;z-index:0;pointer-events:none;}
+.particle{position:fixed;border-radius:50%;background:#FF6B00;animation:twinkle var(--dur) ease-in-out infinite var(--delay);opacity:0;pointer-events:none;z-index:0;}
+@keyframes twinkle{0%,100%{opacity:0;transform:scale(0)}50%{opacity:.5;transform:scale(1)}}
+.z1{position:relative;z-index:1;}
+input::placeholder,textarea::placeholder{color:rgba(255,255,255,.2);}
+input:focus,textarea:focus{outline:none;border-color:#FF6B00!important;background:rgba(255,107,0,.08)!important;box-shadow:0 0 0 3px rgba(255,107,0,.12);}
+.row-hover:hover td{background:rgba(255,107,0,.03);}
+.tab-btn:hover{color:rgba(255,255,255,.7)!important;}
+.del-btn:hover{background:rgba(243,139,168,.15)!important;color:#f38ba8!important;border-color:rgba(243,139,168,.3)!important;}
+.card:hover{border-color:rgba(255,107,0,.3)!important;transform:translateY(-2px);box-shadow:0 8px 32px rgba(255,107,0,.08);}
+.card{transition:all .2s;}
+.btn-main{transition:all .2s;}
+.btn-main:hover:not(:disabled){background:#ff8c33!important;transform:translateY(-1px);box-shadow:0 12px 32px rgba(255,107,0,.4)!important;}
+.btn-ghost-hover:hover:not(:disabled){background:rgba(255,107,0,.08)!important;}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-thumb{background:#333;border-radius:4px;}
+`
+
+function Particles() {
+  return (
+    <>
+      {Array.from({ length: 28 }).map((_, i) => (
+        <div key={i} className="particle" style={{
+          left: `${Math.random() * 100}vw`,
+          top: `${Math.random() * 100}vh`,
+          width: Math.random() > 0.5 ? '2px' : '3px',
+          height: Math.random() > 0.5 ? '2px' : '3px',
+          ['--dur' as any]: `${3 + Math.random() * 3}s`,
+          ['--delay' as any]: `${Math.random() * 4}s`,
+        }} />
+      ))}
+    </>
+  )
+}
+
+function BgFx() {
+  return (
+    <>
+      <style>{G}</style>
+      <div className="orb orb1" />
+      <div className="orb orb2" />
+      <div className="orb orb3" />
+      <div className="grid-bg" />
+      <Particles />
+    </>
+  )
+}
+
+const inp: React.CSSProperties = {
+  width: '100%', padding: '13px 16px',
+  background: 'rgba(255,107,0,0.05)',
+  border: '1px solid rgba(255,107,0,0.15)',
+  borderRadius: '12px', color: 'white',
+  fontSize: '14px', fontFamily: "'Plus Jakarta Sans', sans-serif",
+  transition: 'all .2s',
+}
 
 export default function Home() {
   const [logado, setLogado] = useState(false)
@@ -25,34 +100,21 @@ export default function Home() {
 
   function entrar() {
     const encontrada = empresas.find(e => e.email === email && e.senha === senha)
-    if (encontrada) {
-      setEmpresaAtual(encontrada.empresa)
-      setLogado(true)
-    } else {
-      setErro('Email ou senha incorretos')
-    }
+    if (encontrada) { setEmpresaAtual(encontrada.empresa); setLogado(true) }
+    else setErro('Email ou senha incorretos')
   }
 
   async function carregarContatos() {
     const res = await fetch('/api/contatos?empresa=' + encodeURIComponent(empresaAtual))
     const data = await res.json()
     if (Array.isArray(data)) setContatos(data)
-  } async function atualizarStatus(id: string, status: string) {
-    await fetch('/api/contatos', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, status })
-    })
-    setTimeout(() => carregarContatos(), 1000)
   }
+
   async function deletarContato(id: string) {
-    await fetch('/api/contatos', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id })
-    })
+    await fetch('/api/contatos', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
     carregarContatos()
   }
+
   async function importarCSV(arquivo: File) {
     const texto = await arquivo.text()
     const linhas = texto.split('\n').filter(l => l.trim())
@@ -61,49 +123,30 @@ export default function Home() {
       const nome = partes[0]?.trim().replace(/"/g, '')
       const telefone = partes[1]?.trim().replace(/"/g, '')
       if (nome && telefone) {
-        await fetch('/api/contatos', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nome, telefone, empresa: empresaAtual })
-        })
+        await fetch('/api/contatos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome, telefone, empresa: empresaAtual }) })
       }
     }
     carregarContatos()
   }
 
-  useEffect(() => {
-    if (logado) carregarContatos()
-  }, [logado])
+  useEffect(() => { if (logado) carregarContatos() }, [logado])
 
   async function adicionarContato() {
     if (!novoNome || !novoTel) return
     setAdicionando(true)
-    const res = await fetch('/api/contatos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: novoNome, telefone: novoTel, empresa: empresaAtual })
-    })
+    const res = await fetch('/api/contatos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: novoNome, telefone: novoTel, empresa: empresaAtual }) })
     const data = await res.json()
-    if (data.success) {
-      setNovoNome('')
-      setNovoTel('')
-      carregarContatos()
-    }
+    if (data.success) { setNovoNome(''); setNovoTel(''); carregarContatos() }
     setAdicionando(false)
   }
 
   async function dispararSMS() {
     if (!telefone || !mensagem) { setStatus('Preencha o telefone e a mensagem!'); return }
-    setEnviando(true)
-    setStatus('')
+    setEnviando(true); setStatus('')
     try {
-      const res = await fetch('/api/sms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telefone, mensagem, contatoId: null })
-      })
+      const res = await fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telefone, mensagem, contatoId: null }) })
       const data = await res.json()
-      if (data.success) { setStatus('SMS enviado com sucesso!'); setTelefone(''); setMensagem('') }
+      if (data.success) { setStatus('✓ SMS enviado com sucesso!'); setTelefone(''); setMensagem('') }
       else setStatus('Erro: ' + data.error)
     } catch { setStatus('Erro ao enviar SMS') }
     setEnviando(false)
@@ -111,158 +154,186 @@ export default function Home() {
 
   async function dispararParaTodos() {
     if (!mensagem) { setStatus('Digite a mensagem antes de disparar!'); return }
-    setEnviando(true)
-    setStatus('')
-    let enviados = 0
-    let erros = 0
+    setEnviando(true); setStatus('')
+    let enviados = 0, erros = 0
     for (const contato of contatos) {
       if (!contato.telefone) continue
       try {
-        const res = await fetch('/api/sms', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ telefone: contato.telefone, mensagem, contatoId: contato.id })
-        })
+        const res = await fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telefone: contato.telefone, mensagem, contatoId: contato.id }) })
         const data = await res.json()
-        if (data.success) enviados++
-        else erros++
+        if (data.success) enviados++; else erros++
       } catch { erros++ }
     }
-    setStatus('Disparado! ' + enviados + ' enviados, ' + erros + ' erros.')
-    carregarContatos()
-    setEnviando(false)
+    setStatus(`✓ ${enviados} enviados, ${erros} erros.`)
+    carregarContatos(); setEnviando(false)
   }
 
-  const s = { input: { width: '100%', padding: '12px 16px', background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none', boxSizing: 'border-box' as const } }
+  const initials = empresaAtual.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  const contatosFiltrados = contatos.filter((c: any) => filtroStatus === 'Todos' || c.status === filtroStatus)
 
   if (!logado) return (
-    <main style={{ background: '#0a0a0a', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Arial, sans-serif' }}>
-      <div style={{ background: '#111', border: '1px solid #222', borderRadius: '16px', padding: '40px', width: '100%', maxWidth: '380px' }}>
-        <h1 style={{ color: '#FF6B00', fontSize: '28px', fontWeight: '800', textAlign: 'center', marginBottom: '8px' }}>Flow<span style={{ color: 'white' }}>SMS</span></h1>
-        <p style={{ color: '#666', textAlign: 'center', marginBottom: '32px', fontSize: '14px' }}>Acesse sua conta</p>
-        <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} style={{ ...s.input, marginBottom: '12px' }} />
-        <input type="password" placeholder="Senha" value={senha} onChange={e => setSenha(e.target.value)} style={{ ...s.input, marginBottom: '16px' }} />
-        {erro && <p style={{ color: '#f38ba8', fontSize: '13px', marginBottom: '12px' }}>{erro}</p>}
-        <button onClick={entrar} style={{ width: '100%', padding: '14px', background: '#FF6B00', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '700', cursor: 'pointer' }}>Entrar no Sistema</button>
+    <main style={{ background: '#070709', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <BgFx />
+      <div className="z1" style={{ width: '100%', maxWidth: '420px', background: 'rgba(10,10,12,0.85)', border: '1px solid rgba(255,107,0,0.15)', borderRadius: '24px', padding: '44px 40px', backdropFilter: 'blur(30px)', boxShadow: '0 0 80px rgba(255,107,0,0.08), 0 32px 64px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginBottom: '32px' }}>
+          <span style={{ color: '#FF6B00', fontSize: '22px', fontWeight: 900, fontFamily: "'Space Mono', monospace" }}>Flow</span>
+          <span style={{ color: 'white', fontSize: '22px', fontWeight: 900, fontFamily: "'Space Mono', monospace" }}>SMS</span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+          <div style={{ width: '20px', height: '2px', background: '#FF6B00', borderRadius: '2px' }} />
+          <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '2px', color: '#FF6B00', textTransform: 'uppercase' }}>Área do Cliente</span>
+        </div>
+        <h1 style={{ fontSize: '36px', fontWeight: 900, letterSpacing: '-0.5px', marginBottom: '6px' }}>Bem-vindo!</h1>
+        <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '14px', marginBottom: '36px' }}>Para continuar, efetue o seu login.</p>
+
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, letterSpacing: '1.5px', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', marginBottom: '8px' }}>E-mail</label>
+          <input type="email" placeholder="seu@email.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && entrar()} style={inp} />
+        </div>
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, letterSpacing: '1.5px', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', marginBottom: '8px' }}>Senha</label>
+          <input type="password" placeholder="••••••••" value={senha} onChange={e => setSenha(e.target.value)} onKeyDown={e => e.key === 'Enter' && entrar()} style={inp} />
+        </div>
+
+        {erro && <div style={{ background: 'rgba(243,139,168,0.1)', border: '1px solid rgba(243,139,168,0.25)', borderRadius: '10px', padding: '10px 14px', color: '#f38ba8', fontSize: '13px', marginBottom: '16px' }}>{erro}</div>}
+
+        <button className="btn-main" onClick={entrar} style={{ width: '100%', padding: '16px', background: '#FF6B00', color: 'white', border: 'none', borderRadius: '12px', fontSize: '15px', fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: '0 8px 24px rgba(255,107,0,0.3)', letterSpacing: '0.3px' }}>
+          Entrar no Sistema →
+        </button>
       </div>
     </main>
   )
 
   return (
-    <main style={{ background: '#0a0a0a', minHeight: '100vh', fontFamily: 'Arial, sans-serif' }}>
-      <nav style={{ background: '#111', borderBottom: '1px solid #222', padding: '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ color: '#FF6B00', fontSize: '22px', fontWeight: '800', margin: 0 }}>Flow<span style={{ color: 'white' }}>SMS</span></h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{ color: '#666', fontSize: '13px' }}>{empresaAtual}</span>
-          <button onClick={() => setLogado(false)} style={{ background: 'transparent', color: '#666', border: '1px solid #333', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>Sair</button>
+    <main style={{ background: '#070709', minHeight: '100vh', fontFamily: "'Plus Jakarta Sans', sans-serif", color: 'white' }}>
+      <BgFx />
+
+      {/* Navbar */}
+      <nav className="z1" style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(7,7,9,0.85)', borderBottom: '1px solid rgba(255,107,0,0.1)', padding: '0 32px', height: '64px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backdropFilter: 'blur(20px)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+          <span style={{ color: '#FF6B00', fontSize: '20px', fontWeight: 900, fontFamily: "'Space Mono', monospace" }}>Flow</span>
+          <span style={{ color: 'white', fontSize: '20px', fontWeight: 900, fontFamily: "'Space Mono', monospace" }}>SMS</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'linear-gradient(135deg,#FF6B00,#ff9a4d)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 800, color: 'white' }}>{initials}</div>
+          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px' }}>{empresaAtual}</span>
+          <button onClick={() => setLogado(false)} style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.35)', border: '1px solid rgba(255,255,255,0.08)', padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sair</button>
         </div>
       </nav>
 
-      <div style={{ padding: '32px', maxWidth: '900px', margin: '0 auto' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '32px' }}>
+      <div className="z1" style={{ padding: '32px', maxWidth: '960px', margin: '0 auto' }}>
+
+        {/* Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px', marginBottom: '32px' }}>
           {[
-            ['SMS Enviados', contatos.filter((c: any) => c.smsEnviado).length.toString(), 'enviados'],
-            ['Contatos', contatos.length.toString(), 'no Airtable'],
-            ['Aguardando', contatos.filter((c: any) => c.status === 'Aguardando retorno').length.toString(), 'retorno']
-          ].map(([label, valor, sub]) => (
-            <div key={label} style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: '12px', padding: '20px' }}>
-              <div style={{ fontSize: '12px', color: '#555', marginBottom: '8px', textTransform: 'uppercase' }}>{label}</div>
-              <div style={{ fontSize: '28px', fontWeight: '800', color: '#FF6B00' }}>{valor}</div>
-              <div style={{ fontSize: '12px', color: '#555', marginTop: '4px' }}>{sub}</div>
+            { label: 'SMS Enviados', val: contatos.filter((c: any) => c.smsEnviado).length, sub: 'disparos realizados', icon: '📨', color: '#FF6B00' },
+            { label: 'Contatos', val: contatos.length, sub: 'na base de dados', icon: '👥', color: '#74c7ec' },
+            { label: 'Aguardando', val: contatos.filter((c: any) => c.status === 'Aguardando retorno').length, sub: 'retorno pendente', icon: '⏳', color: '#f9e2af' },
+          ].map(({ label, val, sub, icon, color }) => (
+            <div key={label} className="card" style={{ background: 'rgba(255,107,0,0.04)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '24px', cursor: 'default' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>{label}</span>
+                <span style={{ fontSize: '20px' }}>{icon}</span>
+              </div>
+              <div style={{ fontSize: '40px', fontWeight: 900, color, lineHeight: 1, letterSpacing: '-1px' }}>{val}</div>
+              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.2)', marginTop: '8px' }}>{sub}</div>
             </div>
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.03)', borderRadius: '14px', padding: '4px', width: 'fit-content', marginBottom: '24px' }}>
           {[['sms', '📨 Disparar SMS'], ['contatos', '👥 Contatos'], ['ramal', '📞 Ramal']].map(([aba, label]) => (
-            <button key={aba} onClick={() => setAbaAtiva(aba)} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: '600', background: abaAtiva === aba ? '#FF6B00' : '#111', color: abaAtiva === aba ? 'white' : '#666' }}>{label}</button>
+            <button key={aba} className="tab-btn" onClick={() => setAbaAtiva(aba)} style={{ padding: '9px 22px', borderRadius: '11px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 700, background: abaAtiva === aba ? '#FF6B00' : 'transparent', color: abaAtiva === aba ? 'white' : 'rgba(255,255,255,0.3)', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all .2s' }}>{label}</button>
           ))}
         </div>
 
+        {/* SMS */}
         {abaAtiva === 'sms' && (
-          <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: '12px', padding: '24px' }}>
-            <h2 style={{ color: 'white', fontSize: '16px', fontWeight: '700', marginBottom: '20px' }}>Disparar SMS</h2>
-            <input type="text" placeholder="Telefone (+5511999999999)" value={telefone} onChange={e => setTelefone(e.target.value)} style={{ ...s.input, marginBottom: '12px' }} />
-            <textarea placeholder="Digite a mensagem..." value={mensagem} onChange={e => setMensagem(e.target.value)} rows={4} style={{ ...s.input, marginBottom: '16px', resize: 'none' }} />
-            {status && <p style={{ color: status.includes('sucesso') ? '#a6e3a1' : '#f38ba8', fontSize: '13px', marginBottom: '12px' }}>{status}</p>}
-            <button onClick={dispararSMS} disabled={enviando} style={{ width: '100%', padding: '14px', background: enviando ? '#555' : '#FF6B00', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: '700', cursor: enviando ? 'not-allowed' : 'pointer' }}>
-              {enviando ? 'Enviando...' : '📨 Disparar SMS'}
-            </button>
-            <button onClick={dispararParaTodos} disabled={enviando} style={{ width: '100%', padding: '14px', background: enviando ? '#555' : '#1a1a1a', color: '#FF6B00', border: '1px solid #FF6B00', borderRadius: '8px', fontSize: '16px', fontWeight: '700', cursor: enviando ? 'not-allowed' : 'pointer', marginTop: '10px' }}>
-
-              {enviando ? 'Enviando...' : '🚀 Disparar para Todos os Contatos'}
-            </button>
+          <div style={{ background: 'rgba(255,107,0,0.03)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '28px' }}>
+            <h2 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '24px' }}>Disparar SMS</h2>
+            <input type="text" placeholder="Telefone (+5511999999999)" value={telefone} onChange={e => setTelefone(e.target.value)} style={{ ...inp, marginBottom: '12px' }} />
+            <textarea placeholder="Digite a mensagem..." value={mensagem} onChange={e => setMensagem(e.target.value)} rows={4} style={{ ...inp, marginBottom: '6px', resize: 'none' }} />
+            <div style={{ textAlign: 'right', fontSize: '11px', color: mensagem.length > 140 ? '#f38ba8' : 'rgba(255,255,255,0.2)', marginBottom: '16px' }}>{mensagem.length}/160 caracteres</div>
+            {status && <div style={{ background: status.includes('✓') ? 'rgba(166,227,161,0.1)' : 'rgba(243,139,168,0.1)', border: `1px solid ${status.includes('✓') ? 'rgba(166,227,161,0.25)' : 'rgba(243,139,168,0.25)'}`, borderRadius: '10px', padding: '10px 14px', color: status.includes('✓') ? '#a6e3a1' : '#f38ba8', fontSize: '13px', marginBottom: '16px' }}>{status}</div>}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button className="btn-main" onClick={dispararSMS} disabled={enviando} style={{ flex: 1, padding: '14px', background: enviando ? '#333' : '#FF6B00', color: 'white', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 800, cursor: enviando ? 'not-allowed' : 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: enviando ? 'none' : '0 4px 16px rgba(255,107,0,0.25)' }}>
+                {enviando ? 'Enviando...' : '📨 Enviar SMS'}
+              </button>
+              <button className="btn-ghost-hover" onClick={dispararParaTodos} disabled={enviando} style={{ flex: 1, padding: '14px', background: 'transparent', color: '#FF6B00', border: '1px solid rgba(255,107,0,0.4)', borderRadius: '10px', fontSize: '14px', fontWeight: 800, cursor: enviando ? 'not-allowed' : 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all .2s' }}>
+                {enviando ? 'Enviando...' : '🚀 Disparar para Todos'}
+              </button>
+            </div>
           </div>
         )}
 
+        {/* Contatos */}
         {abaAtiva === 'contatos' && (
-          <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: '12px', padding: '24px' }}>
-            <h2 style={{ color: 'white', fontSize: '16px', fontWeight: '700', marginBottom: '20px' }}>Contatos</h2>
+          <div style={{ background: 'rgba(255,107,0,0.03)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '28px' }}>
+            <h2 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '24px' }}>Contatos</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '10px', marginBottom: '20px' }}>
-              <input placeholder="Nome" value={novoNome} onChange={e => setNovoNome(e.target.value)} style={s.input} />
-              <input placeholder="Telefone (+5511...)" value={novoTel} onChange={e => setNovoTel(e.target.value)} style={s.input} />
-              <button onClick={adicionarContato} disabled={adicionando} style={{ padding: '12px 20px', background: '#FF6B00', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', whiteSpace: 'nowrap' }}>
+              <input placeholder="Nome" value={novoNome} onChange={e => setNovoNome(e.target.value)} style={inp} />
+              <input placeholder="Telefone (+5511...)" value={novoTel} onChange={e => setNovoTel(e.target.value)} style={inp} />
+              <button className="btn-main" onClick={adicionarContato} disabled={adicionando} style={{ padding: '12px 20px', background: '#FF6B00', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 800, whiteSpace: 'nowrap', fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: '0 4px 16px rgba(255,107,0,0.25)' }}>
                 {adicionando ? '...' : '+ Adicionar'}
               </button>
             </div>
-            <div style={{ marginTop: '12px' }}>
-              <label style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', padding: '10px 16px', color: '#aaa', fontSize: '13px', cursor: 'pointer', display: 'inline-block' }}>
-                📁 Importar CSV
-                <input type="file" accept=".csv" onChange={e => e.target.files && importarCSV(e.target.files[0])} style={{ display: 'none' }} />
-              </label>
-              <p style={{ color: '#555', fontSize: '11px', marginTop: '6px' }}>Formato: Nome, Telefone (uma por linha)</p>
-            </div>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', marginTop: '16px', flexWrap: 'wrap' }}>
-              {['Todos', 'Aguardando retorno', 'Não interessado'].map(filtro => (
-                <button key={filtro} onClick={() => setFiltroStatus(filtro)} style={{ padding: '6px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600', background: filtroStatus === filtro ? '#FF6B00' : '#1a1a1a', color: filtroStatus === filtro ? 'white' : '#666' }}>
-                  {filtro}
-                </button>
+            <label style={{ background: 'rgba(255,107,0,0.05)', border: '1px solid rgba(255,107,0,0.12)', borderRadius: '8px', padding: '9px 16px', color: 'rgba(255,255,255,0.35)', fontSize: '13px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              📁 Importar CSV
+              <input type="file" accept=".csv" onChange={e => e.target.files && importarCSV(e.target.files[0])} style={{ display: 'none' }} />
+            </label>
+            <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '11px', marginBottom: '20px' }}>Formato: Nome, Telefone (uma por linha)</p>
+
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+              {['Todos', 'Aguardando retorno', 'Não interessado', 'Sem resposta'].map(f => (
+                <button key={f} onClick={() => setFiltroStatus(f)} style={{ padding: '6px 14px', borderRadius: '20px', border: `1px solid ${filtroStatus === f ? '#FF6B00' : 'rgba(255,107,0,0.15)'}`, cursor: 'pointer', fontSize: '12px', fontWeight: 700, background: filtroStatus === f ? '#FF6B00' : 'transparent', color: filtroStatus === f ? 'white' : 'rgba(255,255,255,0.3)', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all .2s' }}>{f}</button>
               ))}
             </div>
+
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid #222' }}>
-                  {['Nome', 'Telefone', 'Status'].map(h => <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', color: '#555', textTransform: 'uppercase' }}>{h}</th>)}
+                <tr style={{ borderBottom: '1px solid rgba(255,107,0,0.08)' }}>
+                  {['Nome', 'Telefone', 'Status', ''].map(h => <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>{h}</th>)}
                 </tr>
               </thead>
               <tbody>
-                {contatos.length === 0 ? (
-                  <tr><td colSpan={5} style={{ padding: '20px', textAlign: 'center', color: '#555', fontSize: '14px' }}>Nenhum contato ainda</td></tr>
-                ) : contatos.filter((c: any) => filtroStatus === 'Todos' || c.status === filtroStatus).map(c => (
-                  <tr key={c.id} style={{ borderBottom: '1px solid #161616' }}>
-                    <td style={{ padding: '12px', color: 'white', fontSize: '14px' }}>{c.nome}</td>
-                    <td style={{ padding: '12px', color: '#aaa', fontSize: '14px' }}>{c.telefone}</td>
-                    <td style={{ padding: '12px' }}><span style={{ background: '#FF6B0022', color: '#FF6B00', padding: '3px 10px', borderRadius: '20px', fontSize: '11px' }}>{c.status || 'Aguardando'}</span></td>
-                    <td style={{ padding: '12px' }}>
-                      <select onChange={e => atualizarStatus(c.id, e.target.value)} defaultValue={c.status || 'Aguardando retorno'} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '6px', color: 'white', padding: '4px 8px', fontSize: '12px', cursor: 'pointer' }}>
-                        <option>Aguardando retorno</option>
-
-                        <option>Não interessado</option>
-                        <option>Sem resposta</option>
-                      </select>
-                    </td>
-                    <td style={{ padding: '12px' }}>
-                      <button onClick={() => deletarContato(c.id)} style={{ background: 'transparent', color: '#f38ba8', border: '1px solid #f38ba822', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
-                        Deletar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {contatosFiltrados.length === 0 ? (
+                  <tr><td colSpan={4} style={{ padding: '40px', textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '14px' }}>Nenhum contato encontrado</td></tr>
+                ) : contatosFiltrados.map(c => {
+                  const sc = statusColors[c.status] || statusColors['Aguardando retorno']
+                  return (
+                    <tr key={c.id} className="row-hover" style={{ borderBottom: '1px solid rgba(255,107,0,0.05)', transition: 'background .15s' }}>
+                      <td style={{ padding: '14px 12px', color: 'white', fontSize: '14px', fontWeight: 600 }}>{c.nome}</td>
+                      <td style={{ padding: '14px 12px', color: 'rgba(255,255,255,0.35)', fontSize: '12px', fontFamily: "'Space Mono', monospace" }}>{c.telefone}</td>
+                      <td style={{ padding: '14px 12px' }}>
+                        <span style={{ background: sc.bg, color: sc.color, padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                          <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: sc.dot }} />
+                          {c.status || 'Aguardando retorno'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '14px 12px', textAlign: 'right' }}>
+                        <button className="del-btn" onClick={() => deletarContato(c.id)} style={{ background: 'transparent', color: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.08)', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all .2s' }}>Deletar</button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         )}
 
+        {/* Ramal */}
         {abaAtiva === 'ramal' && (
-          <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: '12px', padding: '24px' }}>
-            <h2 style={{ color: 'white', fontSize: '16px', fontWeight: '700', marginBottom: '16px' }}>Ramal Virtual</h2>
-            <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>Número para receber ligações dos clientes</p>
-            <div style={{ background: '#1a1a1a', border: '1px solid #FF6B0044', borderRadius: '8px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ background: 'rgba(255,107,0,0.03)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '28px' }}>
+            <h2 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '8px' }}>Ramal Virtual</h2>
+            <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '14px', marginBottom: '24px' }}>Número para receber ligações dos clientes</p>
+            <div style={{ background: 'rgba(255,107,0,0.06)', border: '1px solid rgba(255,107,0,0.2)', borderRadius: '12px', padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ color: '#FF6B00', fontSize: '20px', fontWeight: '700' }}>+1 252 690 3012</div>
-                <div style={{ color: '#555', fontSize: '12px', marginTop: '4px' }}>Twilio — Aguardando upgrade</div>
+                <div style={{ color: '#FF6B00', fontSize: '22px', fontWeight: 900, fontFamily: "'Space Mono', monospace" }}>+1 252 690 3012</div>
+                <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: '12px', marginTop: '6px' }}>Twilio — Aguardando upgrade</div>
               </div>
-              <div style={{ background: '#f9e2af22', color: '#f9e2af', padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>⏳ Pendente</div>
+              <span style={{ background: 'rgba(249,226,175,0.12)', color: '#f9e2af', padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 700 }}>⏳ Pendente</span>
             </div>
           </div>
         )}

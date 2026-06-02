@@ -110,6 +110,15 @@ export default function Home() {
     if (Array.isArray(data)) setContatos(data)
   }
 
+  async function atualizarStatus(id: string, status: string) {
+    await fetch('/api/contatos', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status })
+    })
+    setTimeout(() => carregarContatos(), 1000)
+  }
+
   async function deletarContato(id: string) {
     await fetch('/api/contatos', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
     carregarContatos()
@@ -294,7 +303,7 @@ export default function Home() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(255,107,0,0.08)' }}>
-                  {['Nome', 'Telefone', 'Status', ''].map(h => <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>{h}</th>)}
+                  {['Nome', 'Telefone', 'Status', 'Alterar', ''].map(h => <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>{h}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -311,6 +320,13 @@ export default function Home() {
                           <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: sc.dot }} />
                           {c.status || 'Aguardando retorno'}
                         </span>
+                      </td>
+                      <td style={{ padding: '14px 12px' }}>
+                        <select onChange={e => atualizarStatus(c.id, e.target.value)} defaultValue={c.status || 'Aguardando retorno'} style={{ background: 'rgba(255,107,0,0.08)', border: '1px solid rgba(255,107,0,0.2)', borderRadius: '8px', color: 'white', padding: '6px 10px', fontSize: '12px', cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", outline: 'none' }}>
+                          <option>Aguardando retorno</option>
+                          <option>Não interessado</option>
+                          <option>Sem resposta</option>
+                        </select>
                       </td>
                       <td style={{ padding: '14px 12px', textAlign: 'right' }}>
                         <button className="del-btn" onClick={() => deletarContato(c.id)} style={{ background: 'transparent', color: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.08)', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all .2s' }}>Deletar</button>

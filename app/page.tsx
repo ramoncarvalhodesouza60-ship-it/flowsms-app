@@ -326,6 +326,7 @@ export default function Home() {
                           <option>Aguardando retorno</option>
                           <option>Não interessado</option>
                           <option>Sem resposta</option>
+                          <option>Convertido</option>
                         </select>
                       </td>
                       <td style={{ padding: '14px 12px', textAlign: 'right' }}>

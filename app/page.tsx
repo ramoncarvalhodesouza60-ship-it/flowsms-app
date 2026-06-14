@@ -435,7 +435,10 @@ export default function Home() {
         {/* WhatsApp */}
         {abaAtiva === 'whatsapp' && (
           <div style={{ background: 'rgba(255,107,0,0.03)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '28px' }}>
-            <h2 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '24px' }}>💬 WhatsApp</h2>
+            <h2 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '16px' }}>💬 WhatsApp</h2>
+            <a href="/whatsapp" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#25d366', color: 'white', padding: '10px 20px', borderRadius: '10px', textDecoration: 'none', fontSize: '13px', fontWeight: 800, marginBottom: '24px' }}>
+              💬 Abrir Conversas ao Vivo →
+            </a>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px', marginBottom: '28px' }}>
               {[
                 { label: 'Mensagens', val: whatsAppUsados, icon: '💬', color: '#25d366' },

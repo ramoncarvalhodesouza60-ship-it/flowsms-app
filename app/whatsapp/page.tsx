@@ -71,6 +71,8 @@ export default function WhatsApp() {
     const inputFotoRef = useRef<HTMLInputElement>(null)
     const inputVideoRef = useRef<HTMLInputElement>(null)
     const inputArquivoRef = useRef<HTMLInputElement>(null)
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+    const audioChunksRef = useRef<Blob[]>([])
 
     const horarioAtual = () => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
@@ -89,13 +91,31 @@ export default function WhatsApp() {
         setMostrarMidia(false)
     }
 
-    function toggleAudio() {
+    async function toggleAudio() {
         if (gravandoAudio) {
-            const nova = { id: Date.now(), texto: '', tipo: 'enviada', horario: horarioAtual(), midia: { tipo: 'audio', url: '', nome: 'Áudio gravado' } }
-            setMensagens(prev => ({ ...prev, [conversaSelecionada.id]: [...(prev[conversaSelecionada.id] || []), nova] }))
+            mediaRecorderRef.current?.stop()
             setGravandoAudio(false)
         } else {
-            setGravandoAudio(true)
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+                const mediaRecorder = new MediaRecorder(stream)
+                mediaRecorderRef.current = mediaRecorder
+                audioChunksRef.current = []
+                mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
+                mediaRecorder.onstop = () => {
+                    const mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' : 'audio/webm'
+                    const blob = new Blob(audioChunksRef.current, { type: mimeType })
+                    const url = URL.createObjectURL(blob)
+                    const nova = { id: Date.now(), texto: '', tipo: 'enviada', horario: horarioAtual(), midia: { tipo: 'audio', url, nome: 'Áudio gravado' } }
+                    setMensagens(prev => ({ ...prev, [conversaSelecionada.id]: [...(prev[conversaSelecionada.id] || []), nova] }))
+                    stream.getTracks().forEach(t => t.stop())
+                }
+                const mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' : 'audio/webm'
+                mediaRecorder.start()
+                setGravandoAudio(true)
+            } catch {
+                alert('Não foi possível acessar o microfone. Verifique as permissões do navegador.')
+            }
         }
     }
 
@@ -261,9 +281,12 @@ export default function WhatsApp() {
                                                 {msg.midia.tipo === 'imagem' && <img src={msg.midia.url} alt="foto" style={{ maxWidth: '200px', borderRadius: '8px', display: 'block' }} />}
                                                 {msg.midia.tipo === 'video' && <video src={msg.midia.url} controls style={{ maxWidth: '200px', borderRadius: '8px', display: 'block' }} />}
                                                 {msg.midia.tipo === 'audio' && (
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                        <span>🎵</span>
-                                                        <span style={{ fontSize: '12px' }}>Áudio gravado</span>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                                                            <span>🎙️</span>
+                                                            <span style={{ fontSize: '11px', opacity: 0.7 }}>Áudio gravado</span>
+                                                        </div>
+                                                        {msg.midia.url && <audio src={msg.midia.url} controls style={{ maxWidth: '220px', height: '36px' }} preload="auto" />}
                                                     </div>
                                                 )}
                                                 {msg.midia.tipo === 'arquivo' && (

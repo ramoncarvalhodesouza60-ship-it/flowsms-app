@@ -118,6 +118,11 @@ export default function Home() {
   const [filtroStatus, setFiltroStatus] = useState('Todos')
   const [smsUsados, setSmsUsados] = useState(0)
   const [whatsAppUsados, setWhatsAppUsados] = useState(0)
+  // WhatsApp states
+  const [waTelefone, setWaTelefone] = useState('')
+  const [waMensagem, setWaMensagem] = useState('')
+  const [waStatus, setWaStatus] = useState('')
+  const [waEnviando, setWaEnviando] = useState(false)
 
   function entrar() {
     const encontrada = empresas.find(e => e.email === email && e.senha === senha)
@@ -133,7 +138,6 @@ export default function Home() {
     const data = await res.json()
     if (Array.isArray(data)) {
       setContatos(data)
-      // Conta SMS enviados reais do Airtable
       const enviados = data.filter((c: any) => c.smsEnviado).length
       setSmsUsados(enviados)
     }
@@ -180,7 +184,6 @@ export default function Home() {
 
   async function dispararSMS() {
     if (!telefone || !mensagem) { setStatus('Preencha o telefone e a mensagem!'); return }
-    // Verifica limite
     if (smsUsados >= (configEmpresa?.limiteSMS || 0)) {
       setStatus('❌ Limite de SMS atingido! Entre em contato para renovar seu plano.')
       return
@@ -223,6 +226,39 @@ export default function Home() {
     setSmsUsados(prev => prev + enviados)
     setStatus(`✓ ${enviados} enviados, ${erros} erros.`)
     carregarContatos(); setEnviando(false)
+  }
+
+  async function enviarWhatsApp() {
+    if (!waTelefone || !waMensagem) { setWaStatus('Preencha o telefone e a mensagem!'); return }
+    if (whatsAppUsados >= (configEmpresa?.limiteWhatsApp || 0)) { setWaStatus('❌ Limite atingido!'); return }
+    setWaEnviando(true); setWaStatus('')
+    try {
+      const res = await fetch('/api/whatsapp/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telefone: waTelefone, mensagem: waMensagem }) })
+      const data = await res.json()
+      if (data.success) {
+        setWhatsAppUsados(prev => prev + 1)
+        setWaStatus('✓ WhatsApp enviado!')
+        setWaTelefone(''); setWaMensagem('')
+      } else setWaStatus('Erro: ' + JSON.stringify(data.error))
+    } catch { setWaStatus('Erro ao enviar') }
+    setWaEnviando(false)
+  }
+
+  async function dispararWhatsAppParaTodos() {
+    if (!waMensagem) { setWaStatus('Digite a mensagem!'); return }
+    setWaEnviando(true)
+    let enviados = 0, erros = 0
+    for (const contato of contatos) {
+      if (!contato.telefone) continue
+      try {
+        const res = await fetch('/api/whatsapp/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telefone: contato.telefone, mensagem: waMensagem }) })
+        const data = await res.json()
+        if (data.success) enviados++; else erros++
+      } catch { erros++ }
+    }
+    setWhatsAppUsados(prev => prev + enviados)
+    setWaStatus(`✓ ${enviados} enviados, ${erros} erros.`)
+    setWaEnviando(false)
   }
 
   const initials = empresaAtual.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
@@ -282,7 +318,6 @@ export default function Home() {
 
         {/* Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px', marginBottom: '32px' }}>
-          {/* Card SMS com barra de progresso */}
           <div className="card" style={{ background: 'rgba(255,107,0,0.04)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '24px', cursor: 'default' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
               <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>SMS Enviados</span>
@@ -454,8 +489,9 @@ export default function Home() {
                 </div>
               ))}
             </div>
-            <input type="text" placeholder="Telefone (+5511999999999)" style={{ ...inp, marginBottom: '12px' }} />
-            <textarea placeholder="Digite a mensagem WhatsApp..." rows={4} style={{ ...inp, marginBottom: '16px', resize: 'none' as const }} />
+            <input type="text" placeholder="Telefone (+5511999999999)" value={waTelefone} onChange={e => setWaTelefone(e.target.value)} style={{ ...inp, marginBottom: '12px' }} />
+            <textarea placeholder="Digite a mensagem WhatsApp..." rows={4} value={waMensagem} onChange={e => setWaMensagem(e.target.value)} style={{ ...inp, marginBottom: '16px', resize: 'none' as const }} />
+            {waStatus && <div style={{ background: waStatus.includes('✓') ? 'rgba(37,211,102,0.1)' : 'rgba(243,139,168,0.1)', border: `1px solid ${waStatus.includes('✓') ? 'rgba(37,211,102,0.25)' : 'rgba(243,139,168,0.25)'}`, borderRadius: '10px', padding: '10px 14px', color: waStatus.includes('✓') ? '#25d366' : '#f38ba8', fontSize: '13px', marginBottom: '16px' }}>{waStatus}</div>}
             {configEmpresa?.limiteWhatsApp !== 999999 && (
               <div style={{ marginBottom: '16px', background: 'rgba(37,211,102,0.06)', border: '1px solid rgba(37,211,102,0.15)', borderRadius: '10px', padding: '12px 16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
@@ -468,11 +504,11 @@ export default function Home() {
               </div>
             )}
             <div style={{ display: 'flex', gap: '12px', marginBottom: '28px' }}>
-              <button onClick={() => { if (whatsAppUsados >= (configEmpresa?.limiteWhatsApp || 0)) { alert('Limite atingido!'); return } setWhatsAppUsados(prev => prev + 1) }} disabled={whatsAppUsados >= (configEmpresa?.limiteWhatsApp || 0)} style={{ flex: 1, padding: '14px', background: whatsAppUsados >= (configEmpresa?.limiteWhatsApp || 0) ? '#333' : '#25d366', color: 'white', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 800, cursor: whatsAppUsados >= (configEmpresa?.limiteWhatsApp || 0) ? 'not-allowed' : 'pointer' }}>
-                {whatsAppUsados >= (configEmpresa?.limiteWhatsApp || 0) ? '❌ Limite Atingido' : '💬 Enviar WhatsApp'}
+              <button onClick={enviarWhatsApp} disabled={waEnviando} style={{ flex: 1, padding: '14px', background: waEnviando ? '#333' : '#25d366', color: 'white', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 800, cursor: waEnviando ? 'not-allowed' : 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                {waEnviando ? 'Enviando...' : '💬 Enviar WhatsApp'}
               </button>
-              <button disabled={whatsAppUsados >= (configEmpresa?.limiteWhatsApp || 0)} style={{ flex: 1, padding: '14px', background: 'transparent', color: '#25d366', border: '1px solid #25d36660', borderRadius: '10px', fontSize: '14px', fontWeight: 800, cursor: whatsAppUsados >= (configEmpresa?.limiteWhatsApp || 0) ? 'not-allowed' : 'pointer' }}>
-                {whatsAppUsados >= (configEmpresa?.limiteWhatsApp || 0) ? '❌ Limite Atingido' : '🚀 Disparar para Todos'}
+              <button onClick={dispararWhatsAppParaTodos} disabled={waEnviando} style={{ flex: 1, padding: '14px', background: 'transparent', color: '#25d366', border: '1px solid #25d36660', borderRadius: '10px', fontSize: '14px', fontWeight: 800, cursor: waEnviando ? 'not-allowed' : 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                {waEnviando ? 'Enviando...' : '🚀 Disparar para Todos'}
               </button>
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
@@ -504,3 +540,4 @@ export default function Home() {
     </main>
   )
 }
+

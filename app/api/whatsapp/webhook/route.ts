@@ -27,7 +27,9 @@ export async function POST(req: NextRequest) {
             const msg = messages[0]
             const telefone = msg.from
             const texto = msg.text?.body || ''
-            const horario = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+            // Formato ISO, igual ao usado pela rota /api/whatsapp/mensagens e pela tela de conversas.
+            // Antes estava como "14:32" (string curta), o que quebrava ordenação e formatação na tela.
+            const horario = new Date().toISOString()
 
             const baseId = process.env.AIRTABLE_BASE_ID
             const tableId = process.env.AIRTABLE_MENSAGENS_ID
@@ -47,6 +49,9 @@ export async function POST(req: NextRequest) {
                         mensagem: texto,
                         tipo: 'recebida',
                         horario: horario,
+                        // TODO: quando houver mais de um cliente (ex: Marcelo) usando o mesmo app da Meta,
+                        // identificar a empresa pelo Phone Number ID que recebeu a mensagem (value.metadata.phone_number_id),
+                        // cruzando com a tabela Clientes, em vez de usar um valor fixo.
                         empresa: 'FlowSMS Admin',
                     }
                 })

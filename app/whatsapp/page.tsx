@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 const tagsDisponiveis = [
     { id: 'quente', label: 'Quente', cor: '#f38ba8', bg: 'rgba(243,139,168,0.15)' },
@@ -26,47 +26,66 @@ const colunas = [
     { id: 'perdido', label: 'Perdido', cor: '#f38ba8', bg: 'rgba(243,139,168,0.08)', borda: 'rgba(243,139,168,0.2)' },
 ]
 
-const contatosIniciais = [
-    { id: 1, nome: 'João Silva', telefone: '+5511999999999', ultimaMensagem: 'Olá, quero saber mais sobre o produto', horario: '14:32', naoLidas: 2, status: 'online', etapa: 'novo' },
-    { id: 2, nome: 'Maria Santos', telefone: '+5521988888888', ultimaMensagem: 'Qual o preço?', horario: '13:15', naoLidas: 0, status: 'offline', etapa: 'em_atendimento' },
-    { id: 3, nome: 'Carlos Oliveira', telefone: '+5531977777777', ultimaMensagem: 'Pode me ligar?', horario: '11:45', naoLidas: 1, status: 'offline', etapa: 'em_atendimento' },
-    { id: 4, nome: 'Ana Beatriz', telefone: '+5541966666666', ultimaMensagem: 'Obrigada!', horario: '10:20', naoLidas: 0, status: 'offline', etapa: 'convertido' },
-]
+type MensagemAirtable = {
+    id: string
+    telefone: string
+    mensagem: string
+    tipo: 'enviada' | 'recebida'
+    horario: string
+    empresa: string
+    nomeContato?: string | null
+    statusContato?: string | null
+}
 
-const mensagensIniciais: Record<number, any[]> = {
-    1: [
-        { id: 1, texto: 'Olá João! Temos uma oferta especial para você. Interessado?', tipo: 'enviada', horario: '14:30' },
-        { id: 2, texto: 'Olá, quero saber mais sobre o produto', tipo: 'recebida', horario: '14:32' },
-        { id: 3, texto: 'Claro! Qual produto te interessa?', tipo: 'ia', horario: '14:32' },
-    ],
-    2: [
-        { id: 1, texto: 'Olá Maria! Temos uma oferta especial para você!', tipo: 'enviada', horario: '13:10' },
-        { id: 2, texto: 'Qual o preço?', tipo: 'recebida', horario: '13:15' },
-    ],
-    3: [
-        { id: 1, texto: 'Olá Carlos! Temos novidades para você!', tipo: 'enviada', horario: '11:40' },
-        { id: 2, texto: 'Pode me ligar?', tipo: 'recebida', horario: '11:45' },
-    ],
-    4: [
-        { id: 1, texto: 'Olá Ana! Aproveite nossa promoção!', tipo: 'enviada', horario: '10:15' },
-        { id: 2, texto: 'Obrigada!', tipo: 'recebida', horario: '10:20' },
-    ],
+type Contato = {
+    id: string // usamos o telefone como id único do contato
+    nome: string
+    temNome: boolean
+    telefone: string
+    ultimaMensagem: string
+    horario: string
+    naoLidas: number
+    status: string
+    etapa: string
+}
+
+type MensagemView = {
+    id: string
+    texto: string
+    tipo: 'enviada' | 'recebida' | 'ia'
+    horario: string
+    midia?: { tipo: string; url: string; nome: string }
+}
+
+function formatarHora(iso: string) {
+    try {
+        return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    } catch {
+        return iso
+    }
 }
 
 export default function WhatsApp() {
-    const [contatos, setContatos] = useState(contatosIniciais)
-    const [mensagens, setMensagens] = useState(mensagensIniciais)
-    const [conversaSelecionada, setConversaSelecionada] = useState(contatosIniciais[0])
+    const [carregando, setCarregando] = useState(true)
+    const [erro, setErro] = useState<string | null>(null)
+    const [mensagensRaw, setMensagensRaw] = useState<MensagemAirtable[]>([])
+    const [contatos, setContatos] = useState<Contato[]>([])
+    const [etapasPorTelefone, setEtapasPorTelefone] = useState<Record<string, string>>({})
+    const [conversaSelecionada, setConversaSelecionada] = useState<Contato | null>(null)
     const [novaMensagem, setNovaMensagem] = useState('')
     const [busca, setBusca] = useState('')
     const [iaAtiva, setIaAtiva] = useState(true)
     const [view, setView] = useState<'conversas' | 'kanban'>('conversas')
-    const [dragId, setDragId] = useState<number | null>(null)
+    const [dragId, setDragId] = useState<string | null>(null)
     const [mostrarRespostas, setMostrarRespostas] = useState(false)
     const [mostrarTags, setMostrarTags] = useState(false)
-    const [tagsPorContato, setTagsPorContato] = useState<Record<number, string[]>>({})
+    const [tagsPorContato, setTagsPorContato] = useState<Record<string, string[]>>({})
     const [mostrarMidia, setMostrarMidia] = useState(false)
     const [gravandoAudio, setGravandoAudio] = useState(false)
+    const [enviando, setEnviando] = useState(false)
+    const [cadastrando, setCadastrando] = useState(false)
+    const [nomeParaCadastro, setNomeParaCadastro] = useState('')
+    const [mostrarCadastro, setMostrarCadastro] = useState(false)
 
     const inputFotoRef = useRef<HTMLInputElement>(null)
     const inputVideoRef = useRef<HTMLInputElement>(null)
@@ -76,18 +95,121 @@ export default function WhatsApp() {
 
     const horarioAtual = () => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
-    function enviarMensagem() {
-        if (!novaMensagem.trim()) return
-        const nova = { id: Date.now(), texto: novaMensagem, tipo: 'enviada', horario: horarioAtual() }
-        setMensagens(prev => ({ ...prev, [conversaSelecionada.id]: [...(prev[conversaSelecionada.id] || []), nova] }))
+    // Busca mensagens do Airtable e monta a lista de contatos agrupando por telefone
+    async function carregarMensagens() {
+        try {
+            setCarregando(true)
+            setErro(null)
+            const res = await fetch('/api/whatsapp/mensagens')
+            const data = await res.json()
+            if (!Array.isArray(data)) {
+                setErro('Não foi possível carregar as mensagens.')
+                setCarregando(false)
+                return
+            }
+            setMensagensRaw(data)
+
+            // Agrupa por telefone para montar a lista de contatos
+            const porTelefone = new Map<string, MensagemAirtable[]>()
+            data.forEach((m: MensagemAirtable) => {
+                if (!m.telefone) return
+                if (!porTelefone.has(m.telefone)) porTelefone.set(m.telefone, [])
+                porTelefone.get(m.telefone)!.push(m)
+            })
+
+            const novosContatos: Contato[] = []
+            porTelefone.forEach((msgs, telefone) => {
+                const ordenadas = [...msgs].sort((a, b) => new Date(a.horario).getTime() - new Date(b.horario).getTime())
+                const ultima = ordenadas[ordenadas.length - 1]
+                const nomeReal = ordenadas.find(m => m.nomeContato)?.nomeContato
+                const statusReal = ordenadas.find(m => m.statusContato)?.statusContato
+                novosContatos.push({
+                    id: telefone,
+                    nome: nomeReal || telefone,
+                    temNome: Boolean(nomeReal),
+                    telefone,
+                    ultimaMensagem: ultima?.mensagem || '',
+                    horario: ultima ? formatarHora(ultima.horario) : '',
+                    naoLidas: 0,
+                    status: statusReal || 'offline',
+                    etapa: etapasPorTelefone[telefone] || 'novo',
+                })
+            })
+
+            // Ordena pelo mais recente
+            novosContatos.sort((a, b) => (a.horario < b.horario ? 1 : -1))
+
+            setContatos(novosContatos)
+            if (novosContatos.length > 0 && !conversaSelecionada) {
+                setConversaSelecionada(novosContatos[0])
+            }
+            setCarregando(false)
+        } catch (e: any) {
+            setErro('Erro ao carregar mensagens: ' + e.message)
+            setCarregando(false)
+        }
+    }
+
+    useEffect(() => {
+        carregarMensagens()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    async function enviarMensagem() {
+        if (!novaMensagem.trim() || !conversaSelecionada) return
+        const texto = novaMensagem
         setNovaMensagem('')
+        setEnviando(true)
+
+        // Atualiza tela imediatamente (otimista)
+        const otimista: MensagemAirtable = {
+            id: 'temp-' + Date.now(),
+            telefone: conversaSelecionada.telefone,
+            mensagem: texto,
+            tipo: 'enviada',
+            horario: new Date().toISOString(),
+            empresa: '',
+        }
+        setMensagensRaw(prev => [...prev, otimista])
+
+        try {
+            // 1. Envia de fato via WhatsApp (Meta)
+            await fetch('/api/whatsapp/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telefone: conversaSelecionada.telefone, mensagem: texto }),
+            })
+
+            // 2. Salva no Airtable como histórico
+            await fetch('/api/whatsapp/mensagens', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telefone: conversaSelecionada.telefone, mensagem: texto, tipo: 'enviada' }),
+            })
+
+            // 3. Recarrega para refletir o estado real do Airtable
+            await carregarMensagens()
+        } catch (e) {
+            setErro('Falha ao enviar mensagem.')
+        } finally {
+            setEnviando(false)
+        }
     }
 
     function enviarMidia(arquivo: File) {
+        if (!conversaSelecionada) return
         const url = URL.createObjectURL(arquivo)
         const tipo_arquivo = arquivo.type.startsWith('image/') ? 'imagem' : arquivo.type.startsWith('video/') ? 'video' : 'arquivo'
-        const nova = { id: Date.now(), texto: '', tipo: 'enviada', horario: horarioAtual(), midia: { tipo: tipo_arquivo, url, nome: arquivo.name } }
-        setMensagens(prev => ({ ...prev, [conversaSelecionada.id]: [...(prev[conversaSelecionada.id] || []), nova] }))
+        // Mídia ainda não persiste no Airtable (precisa de upload de arquivo); fica só local por enquanto
+        const nova: MensagemAirtable = {
+            id: 'temp-midia-' + Date.now(),
+            telefone: conversaSelecionada.telefone,
+            mensagem: '[' + tipo_arquivo + '] ' + arquivo.name,
+            tipo: 'enviada',
+            horario: new Date().toISOString(),
+            empresa: '',
+        }
+        setMensagensRaw(prev => [...prev, nova])
         setMostrarMidia(false)
     }
 
@@ -103,14 +225,21 @@ export default function WhatsApp() {
                 audioChunksRef.current = []
                 mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
                 mediaRecorder.onstop = () => {
+                    if (!conversaSelecionada) return
                     const mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' : 'audio/webm'
                     const blob = new Blob(audioChunksRef.current, { type: mimeType })
                     const url = URL.createObjectURL(blob)
-                    const nova = { id: Date.now(), texto: '', tipo: 'enviada', horario: horarioAtual(), midia: { tipo: 'audio', url, nome: 'Áudio gravado' } }
-                    setMensagens(prev => ({ ...prev, [conversaSelecionada.id]: [...(prev[conversaSelecionada.id] || []), nova] }))
+                    const nova: MensagemAirtable = {
+                        id: 'temp-audio-' + Date.now(),
+                        telefone: conversaSelecionada.telefone,
+                        mensagem: '[audio] Áudio gravado',
+                        tipo: 'enviada',
+                        horario: new Date().toISOString(),
+                        empresa: '',
+                    }
+                    setMensagensRaw(prev => [...prev, nova])
                     stream.getTracks().forEach(t => t.stop())
                 }
-                const mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' : 'audio/webm'
                 mediaRecorder.start()
                 setGravandoAudio(true)
             } catch {
@@ -119,11 +248,34 @@ export default function WhatsApp() {
         }
     }
 
-    function moverParaColuna(id: number, novaEtapa: string) {
-        setContatos(prev => prev.map(c => c.id === id ? { ...c, etapa: novaEtapa } : c))
+    async function cadastrarContato() {
+        if (!conversaSelecionada || !nomeParaCadastro.trim()) return
+        setCadastrando(true)
+        try {
+            await fetch('/api/contatos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nome: nomeParaCadastro, telefone: conversaSelecionada.telefone, empresa: '' }),
+            })
+            setMostrarCadastro(false)
+            setNomeParaCadastro('')
+            await carregarMensagens()
+        } catch {
+            setErro('Falha ao cadastrar contato.')
+        } finally {
+            setCadastrando(false)
+        }
     }
 
-    function toggleTag(contatoId: number, tagId: string) {
+    function moverParaColuna(telefone: string, novaEtapa: string) {
+        setEtapasPorTelefone(prev => ({ ...prev, [telefone]: novaEtapa }))
+        setContatos(prev => prev.map(c => c.id === telefone ? { ...c, etapa: novaEtapa } : c))
+        if (conversaSelecionada?.id === telefone) {
+            setConversaSelecionada(prev => prev ? { ...prev, etapa: novaEtapa } : prev)
+        }
+    }
+
+    function toggleTag(contatoId: string, tagId: string) {
         setTagsPorContato(prev => {
             const atual = prev[contatoId] || []
             const novas = atual.includes(tagId) ? atual.filter(t => t !== tagId) : [...atual, tagId]
@@ -131,10 +283,22 @@ export default function WhatsApp() {
         })
     }
 
-    const conversasFiltradas = contatos.filter(c => c.nome.toLowerCase().includes(busca.toLowerCase()))
-    const msgAtual = mensagens[conversaSelecionada.id] || []
-    const etapaAtual = contatos.find(c => c.id === conversaSelecionada.id)?.etapa || 'novo'
-    const tagsAtual = tagsPorContato[conversaSelecionada.id] || []
+    const conversasFiltradas = contatos.filter(c => c.nome.toLowerCase().includes(busca.toLowerCase()) || c.telefone.includes(busca))
+
+    const msgAtual: MensagemView[] = conversaSelecionada
+        ? mensagensRaw
+            .filter(m => m.telefone === conversaSelecionada.telefone)
+            .sort((a, b) => new Date(a.horario).getTime() - new Date(b.horario).getTime())
+            .map(m => ({
+                id: m.id,
+                texto: m.mensagem,
+                tipo: m.tipo,
+                horario: formatarHora(m.horario),
+            }))
+        : []
+
+    const etapaAtual = conversaSelecionada?.etapa || 'novo'
+    const tagsAtual = conversaSelecionada ? (tagsPorContato[conversaSelecionada.id] || []) : []
 
     const btnStyle = (ativo?: boolean): React.CSSProperties => ({
         background: ativo ? 'rgba(255,107,0,0.2)' : '#1a1a1a',
@@ -147,6 +311,16 @@ export default function WhatsApp() {
         fontFamily: 'Arial',
     })
 
+    if (carregando) {
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', height: '100vh', background: '#0a0a0a', fontFamily: 'Arial' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #1a1a1a', borderTopColor: '#FF6B00', animation: 'spin 0.8s linear infinite' }} />
+                <span style={{ color: '#555', fontSize: '13px' }}>Carregando conversas...</span>
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+        )
+    }
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0a0a0a', fontFamily: 'Arial, sans-serif' }}>
 
@@ -158,8 +332,10 @@ export default function WhatsApp() {
                         Flow<span style={{ color: 'white' }}>SMS</span>
                         <span style={{ color: '#555', fontWeight: 400, fontSize: '14px' }}> — WhatsApp</span>
                     </span>
+                    {erro && <span style={{ color: '#f38ba8', fontSize: '11px' }}>{erro}</span>}
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button onClick={carregarMensagens} style={btnStyle()}>🔄 Atualizar</button>
                     <div style={{ display: 'flex', background: '#1a1a1a', borderRadius: '8px', padding: '3px', gap: '2px' }}>
                         <button onClick={() => setView('conversas')} style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 600, background: view === 'conversas' ? '#FF6B00' : 'transparent', color: view === 'conversas' ? 'white' : '#555', fontFamily: 'Arial' }}>
                             💬 Conversas
@@ -174,8 +350,16 @@ export default function WhatsApp() {
                 </div>
             </div>
 
+            {contatos.length === 0 && (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#555', fontFamily: 'Arial' }}>
+                    <div style={{ fontSize: '36px', opacity: 0.4 }}>💬</div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#777' }}>Nenhuma conversa ainda</div>
+                    <div style={{ fontSize: '12px', color: '#444' }}>As mensagens aparecerão aqui quando alguém escrever no WhatsApp.</div>
+                </div>
+            )}
+
             {/* VIEW CONVERSAS */}
-            {view === 'conversas' && (
+            {view === 'conversas' && contatos.length > 0 && conversaSelecionada && (
                 <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
                     {/* SIDEBAR */}
@@ -192,12 +376,12 @@ export default function WhatsApp() {
                                     <div key={c.id} onClick={() => setConversaSelecionada(c)}
                                         style={{ padding: '12px 16px', borderBottom: '1px solid #161616', cursor: 'pointer', background: conversaSelecionada.id === c.id ? '#1a1a1a' : 'transparent', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                                         <div style={{ position: 'relative', flexShrink: 0 }}>
-                                            <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: '#FF6B0033', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 700, color: '#FF6B00' }}>{c.nome[0]}</div>
+                                            <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: c.temNome ? '#FF6B0033' : '#33333355', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: c.temNome ? '16px' : '18px', fontWeight: 700, color: c.temNome ? '#FF6B00' : '#777' }}>{c.temNome ? c.nome[0] : '👤'}</div>
                                             <div style={{ position: 'absolute', bottom: '1px', right: '1px', width: '9px', height: '9px', borderRadius: '50%', background: c.status === 'online' ? '#22c55e' : '#555', border: '2px solid #111' }} />
                                         </div>
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-                                                <span style={{ color: 'white', fontSize: '13px', fontWeight: 600 }}>{c.nome}</span>
+                                                <span style={{ color: c.temNome ? 'white' : '#999', fontSize: '13px', fontWeight: 600, fontStyle: c.temNome ? 'normal' : 'italic' }}>{c.temNome ? c.nome : c.telefone}</span>
                                                 <span style={{ color: '#555', fontSize: '10px' }}>{c.horario}</span>
                                             </div>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
@@ -228,9 +412,11 @@ export default function WhatsApp() {
                         {/* HEADER */}
                         <div style={{ padding: '12px 20px', borderBottom: '1px solid #1e1e1e', background: '#111', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
                             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#FF6B0033', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 700, color: '#FF6B00' }}>{conversaSelecionada.nome[0]}</div>
+                                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: conversaSelecionada.temNome ? '#FF6B0033' : '#33333355', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: conversaSelecionada.temNome ? '14px' : '16px', fontWeight: 700, color: conversaSelecionada.temNome ? '#FF6B00' : '#777' }}>{conversaSelecionada.temNome ? conversaSelecionada.nome[0] : '👤'}</div>
                                 <div>
-                                    <div style={{ color: 'white', fontSize: '14px', fontWeight: 600 }}>{conversaSelecionada.nome}</div>
+                                    <div style={{ color: conversaSelecionada.temNome ? 'white' : '#999', fontSize: '14px', fontWeight: 600, fontStyle: conversaSelecionada.temNome ? 'normal' : 'italic' }}>
+                                        {conversaSelecionada.temNome ? conversaSelecionada.nome : 'Sem cadastro'}
+                                    </div>
                                     <div style={{ color: '#555', fontSize: '11px' }}>{conversaSelecionada.telefone}</div>
                                 </div>
                             </div>
@@ -239,6 +425,12 @@ export default function WhatsApp() {
                                     style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '6px', color: 'white', padding: '5px 8px', fontSize: '11px', cursor: 'pointer', outline: 'none', fontFamily: 'Arial' }}>
                                     {colunas.map(col => <option key={col.id} value={col.id}>{col.label}</option>)}
                                 </select>
+                                {!conversaSelecionada.temNome && (
+                                    <button onClick={() => { setMostrarCadastro(!mostrarCadastro); setMostrarTags(false); setMostrarRespostas(false); setMostrarMidia(false) }}
+                                        style={{ ...btnStyle(mostrarCadastro), color: '#22c55e', border: '1px solid rgba(34,197,94,0.4)' }}>
+                                        ➕ Cadastrar
+                                    </button>
+                                )}
                                 <button onClick={() => { setMostrarTags(!mostrarTags); setMostrarRespostas(false); setMostrarMidia(false) }} style={btnStyle(mostrarTags)}>🏷️ Tags</button>
                                 <button style={btnStyle()}>📞 Ligar</button>
                                 <button onClick={() => setIaAtiva(!iaAtiva)} style={{ ...btnStyle(iaAtiva), background: iaAtiva ? '#FF6B00' : '#1a1a1a', color: 'white' }}>
@@ -246,6 +438,24 @@ export default function WhatsApp() {
                                 </button>
                             </div>
                         </div>
+
+                        {/* PAINEL CADASTRO DE CONTATO */}
+                        {mostrarCadastro && (
+                            <div style={{ padding: '10px 20px', background: '#0f0f0f', borderBottom: '1px solid #1e1e1e', display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+                                <span style={{ color: '#555', fontSize: '11px' }}>Nome:</span>
+                                <input
+                                    value={nomeParaCadastro}
+                                    onChange={e => setNomeParaCadastro(e.target.value)}
+                                    placeholder="Nome do contato"
+                                    onKeyDown={e => e.key === 'Enter' && cadastrarContato()}
+                                    style={{ flex: 1, maxWidth: '240px', padding: '6px 12px', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '8px', color: 'white', fontSize: '12px', outline: 'none', fontFamily: 'Arial' }}
+                                />
+                                <button onClick={cadastrarContato} disabled={cadastrando || !nomeParaCadastro.trim()}
+                                    style={{ background: '#22c55e', border: 'none', color: 'white', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '11px', fontWeight: 600, fontFamily: 'Arial', opacity: cadastrando || !nomeParaCadastro.trim() ? 0.5 : 1 }}>
+                                    {cadastrando ? 'Salvando...' : 'Salvar'}
+                                </button>
+                            </div>
+                        )}
 
                         {/* PAINEL TAGS */}
                         {mostrarTags && (
@@ -368,14 +578,15 @@ export default function WhatsApp() {
                                     ⚡
                                 </button>
                                 <input
-                                    placeholder="Digite uma mensagem..."
+                                    placeholder={enviando ? 'Enviando...' : 'Digite uma mensagem...'}
                                     value={novaMensagem}
+                                    disabled={enviando}
                                     onChange={e => setNovaMensagem(e.target.value)}
                                     onKeyDown={e => e.key === 'Enter' && enviarMensagem()}
                                     style={{ flex: 1, padding: '11px 16px', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '24px', color: 'white', fontSize: '13px', outline: 'none', fontFamily: 'Arial' }}
                                 />
-                                <button onClick={enviarMensagem}
-                                    style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#FF6B00', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>
+                                <button onClick={enviarMensagem} disabled={enviando}
+                                    style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#FF6B00', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0, opacity: enviando ? 0.6 : 1 }}>
                                     ➤
                                 </button>
                             </div>
@@ -385,7 +596,7 @@ export default function WhatsApp() {
             )}
 
             {/* VIEW KANBAN */}
-            {view === 'kanban' && (
+            {view === 'kanban' && contatos.length > 0 && (
                 <div style={{ flex: 1, overflowX: 'auto', padding: '24px', display: 'flex', gap: '16px' }}>
                     {colunas.map(col => {
                         const cards = contatos.filter(c => c.etapa === col.id)
@@ -405,9 +616,9 @@ export default function WhatsApp() {
                                             onClick={() => { setConversaSelecionada(c); setView('conversas') }}
                                             style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: '10px', padding: '12px', cursor: 'grab' }}>
                                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
-                                                <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: '#FF6B0033', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, color: '#FF6B00', flexShrink: 0 }}>{c.nome[0]}</div>
+                                                <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: c.temNome ? '#FF6B0033' : '#33333355', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: c.temNome ? '12px' : '14px', fontWeight: 700, color: c.temNome ? '#FF6B00' : '#777', flexShrink: 0 }}>{c.temNome ? c.nome[0] : '👤'}</div>
                                                 <div>
-                                                    <div style={{ color: 'white', fontSize: '12px', fontWeight: 600 }}>{c.nome}</div>
+                                                    <div style={{ color: c.temNome ? 'white' : '#999', fontSize: '12px', fontWeight: 600, fontStyle: c.temNome ? 'normal' : 'italic' }}>{c.temNome ? c.nome : 'Sem cadastro'}</div>
                                                     <div style={{ color: '#555', fontSize: '10px' }}>{c.telefone}</div>
                                                 </div>
                                             </div>

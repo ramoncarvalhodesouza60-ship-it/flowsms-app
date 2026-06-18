@@ -196,21 +196,52 @@ export default function WhatsApp() {
         }
     }
 
-    function enviarMidia(arquivo: File) {
-        if (!conversaSelecionada) return
-        const url = URL.createObjectURL(arquivo)
-        const tipo_arquivo = arquivo.type.startsWith('image/') ? 'imagem' : arquivo.type.startsWith('video/') ? 'video' : 'arquivo'
-        // Mídia ainda não persiste no Airtable (precisa de upload de arquivo); fica só local por enquanto
-        const nova: MensagemAirtable = {
-            id: 'temp-midia-' + Date.now(),
-            telefone: conversaSelecionada.telefone,
-            mensagem: '[' + tipo_arquivo + '] ' + arquivo.name,
-            tipo: 'enviada',
-            horario: new Date().toISOString(),
-            empresa: '',
+    // Sobe o arquivo para o Vercel Blob (via /api/whatsapp/upload) e devolve a URL pública
+    async function subirArquivo(arquivo: File | Blob, nomeArquivo: string): Promise<string | null> {
+        try {
+            const formData = new FormData()
+            formData.append('file', arquivo, nomeArquivo)
+            const res = await fetch('/api/whatsapp/upload', { method: 'POST', body: formData })
+            const data = await res.json()
+            if (data.success) return data.url
+            setErro('Falha ao subir arquivo: ' + (data.error || 'erro desconhecido'))
+            return null
+        } catch (e: any) {
+            setErro('Falha ao subir arquivo: ' + e.message)
+            return null
         }
-        setMensagensRaw(prev => [...prev, nova])
+    }
+
+    async function enviarMidia(arquivo: File) {
+        if (!conversaSelecionada) return
         setMostrarMidia(false)
+        setEnviando(true)
+
+        const tipoMeta = arquivo.type.startsWith('image/') ? 'image' : arquivo.type.startsWith('video/') ? 'video' : 'document'
+        const tipoLabel = tipoMeta === 'image' ? 'imagem' : tipoMeta === 'video' ? 'video' : 'arquivo'
+
+        try {
+            const urlPublica = await subirArquivo(arquivo, arquivo.name)
+            if (!urlPublica) return
+
+            await fetch('/api/whatsapp/send-media', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telefone: conversaSelecionada.telefone, mediaUrl: urlPublica, tipo: tipoMeta, nomeArquivo: arquivo.name }),
+            })
+
+            await fetch('/api/whatsapp/mensagens', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telefone: conversaSelecionada.telefone, mensagem: '[' + tipoLabel + '] ' + urlPublica, tipo: 'enviada' }),
+            })
+
+            await carregarMensagens()
+        } catch (e: any) {
+            setErro('Falha ao enviar mídia: ' + e.message)
+        } finally {
+            setEnviando(false)
+        }
     }
 
     async function toggleAudio() {
@@ -224,21 +255,37 @@ export default function WhatsApp() {
                 mediaRecorderRef.current = mediaRecorder
                 audioChunksRef.current = []
                 mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
-                mediaRecorder.onstop = () => {
-                    if (!conversaSelecionada) return
-                    const mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' : 'audio/webm'
-                    const blob = new Blob(audioChunksRef.current, { type: mimeType })
-                    const url = URL.createObjectURL(blob)
-                    const nova: MensagemAirtable = {
-                        id: 'temp-audio-' + Date.now(),
-                        telefone: conversaSelecionada.telefone,
-                        mensagem: '[audio] Áudio gravado',
-                        tipo: 'enviada',
-                        horario: new Date().toISOString(),
-                        empresa: '',
-                    }
-                    setMensagensRaw(prev => [...prev, nova])
+                mediaRecorder.onstop = async () => {
                     stream.getTracks().forEach(t => t.stop())
+                    if (!conversaSelecionada) return
+
+                    const mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' : 'audio/webm'
+                    const extensao = mimeType.includes('mp4') ? 'm4a' : mimeType.includes('ogg') ? 'ogg' : 'webm'
+                    const blob = new Blob(audioChunksRef.current, { type: mimeType })
+
+                    setEnviando(true)
+                    try {
+                        const urlPublica = await subirArquivo(blob, 'audio-' + Date.now() + '.' + extensao)
+                        if (!urlPublica) return
+
+                        await fetch('/api/whatsapp/send-media', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ telefone: conversaSelecionada.telefone, mediaUrl: urlPublica, tipo: 'audio' }),
+                        })
+
+                        await fetch('/api/whatsapp/mensagens', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ telefone: conversaSelecionada.telefone, mensagem: '[audio] ' + urlPublica, tipo: 'enviada' }),
+                        })
+
+                        await carregarMensagens()
+                    } catch (e: any) {
+                        setErro('Falha ao enviar áudio: ' + e.message)
+                    } finally {
+                        setEnviando(false)
+                    }
                 }
                 mediaRecorder.start()
                 setGravandoAudio(true)
@@ -285,16 +332,30 @@ export default function WhatsApp() {
 
     const conversasFiltradas = contatos.filter(c => c.nome.toLowerCase().includes(busca.toLowerCase()) || c.telefone.includes(busca))
 
+    // Detecta se a mensagem é uma mídia salva com prefixo [tipo] e extrai a URL
+    function extrairMidia(texto: string): { tipo: string; url: string; nome: string } | null {
+        const match = texto.match(/^\[(audio|imagem|video|arquivo)\]\s*(.+)$/)
+        if (!match) return null
+        const tipoBruto = match[1]
+        const conteudo = match[2]
+        const tipo = tipoBruto === 'imagem' ? 'imagem' : tipoBruto === 'video' ? 'video' : tipoBruto === 'audio' ? 'audio' : 'arquivo'
+        return { tipo, url: conteudo, nome: conteudo.split('/').pop() || 'arquivo' }
+    }
+
     const msgAtual: MensagemView[] = conversaSelecionada
         ? mensagensRaw
             .filter(m => m.telefone === conversaSelecionada.telefone)
             .sort((a, b) => new Date(a.horario).getTime() - new Date(b.horario).getTime())
-            .map(m => ({
-                id: m.id,
-                texto: m.mensagem,
-                tipo: m.tipo,
-                horario: formatarHora(m.horario),
-            }))
+            .map(m => {
+                const midia = extrairMidia(m.mensagem)
+                return {
+                    id: m.id,
+                    texto: midia ? '' : m.mensagem,
+                    tipo: m.tipo,
+                    horario: formatarHora(m.horario),
+                    midia: midia || undefined,
+                }
+            })
         : []
 
     const etapaAtual = conversaSelecionada?.etapa || 'novo'
@@ -494,7 +555,7 @@ export default function WhatsApp() {
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
                                                             <span>🎙️</span>
-                                                            <span style={{ fontSize: '11px', opacity: 0.7 }}>Áudio gravado</span>
+                                                            <span style={{ fontSize: '11px', opacity: 0.7 }}>Áudio</span>
                                                         </div>
                                                         {msg.midia.url && <audio src={msg.midia.url} controls style={{ maxWidth: '220px', height: '36px' }} preload="auto" />}
                                                     </div>
@@ -502,7 +563,7 @@ export default function WhatsApp() {
                                                 {msg.midia.tipo === 'arquivo' && (
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                         <span>📎</span>
-                                                        <span style={{ fontSize: '12px' }}>{msg.midia.nome}</span>
+                                                        <a href={msg.midia.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: 'inherit' }}>{msg.midia.nome}</a>
                                                     </div>
                                                 )}
                                             </div>

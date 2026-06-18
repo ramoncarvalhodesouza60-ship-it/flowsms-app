@@ -333,7 +333,8 @@ export default function WhatsApp() {
     const conversasFiltradas = contatos.filter(c => c.nome.toLowerCase().includes(busca.toLowerCase()) || c.telefone.includes(busca))
 
     // Detecta se a mensagem é uma mídia salva com prefixo [tipo] e extrai a URL
-    function extrairMidia(texto: string): { tipo: string; url: string; nome: string } | null {
+    function extrairMidia(texto: string | null | undefined): { tipo: string; url: string; nome: string } | null {
+        if (!texto) return null
         const match = texto.match(/^\[(audio|imagem|video|arquivo)\]\s*(.+)$/)
         if (!match) return null
         const tipoBruto = match[1]

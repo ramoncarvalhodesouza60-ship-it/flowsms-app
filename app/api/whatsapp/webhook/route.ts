@@ -27,16 +27,14 @@ export async function POST(req: NextRequest) {
             const msg = messages[0]
             const telefone = msg.from
             const texto = msg.text?.body || ''
-            // Formato ISO, igual ao usado pela rota /api/whatsapp/mensagens e pela tela de conversas.
-            // Antes estava como "14:32" (string curta), o que quebrava ordenação e formatação na tela.
             const horario = new Date().toISOString()
 
             const baseId = process.env.AIRTABLE_BASE_ID
             const tableId = process.env.AIRTABLE_MENSAGENS_ID
             const apiKey = process.env.AIRTABLE_API_KEY
-
             const url = 'https://api.airtable.com/v0/' + baseId + '/' + tableId
 
+            // 1. Salva mensagem recebida no Airtable
             await fetch(url, {
                 method: 'POST',
                 headers: {
@@ -45,17 +43,55 @@ export async function POST(req: NextRequest) {
                 },
                 body: JSON.stringify({
                     fields: {
-                        telefone: telefone,
+                        telefone,
                         mensagem: texto,
                         tipo: 'recebida',
-                        horario: horario,
-                        // TODO: quando houver mais de um cliente (ex: Marcelo) usando o mesmo app da Meta,
-                        // identificar a empresa pelo Phone Number ID que recebeu a mensagem (value.metadata.phone_number_id),
-                        // cruzando com a tabela Clientes, em vez de usar um valor fixo.
+                        horario,
                         empresa: 'FlowSMS Admin',
                     }
                 })
             })
+
+            // 2. Chama a IA e responde automaticamente
+            if (texto) {
+                const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://flowsms.com.br'
+
+                const iaRes = await fetch(baseUrl + '/api/whatsapp/ia', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mensagem: texto, telefone })
+                })
+
+                const iaData = await iaRes.json()
+                const resposta = iaData.resposta
+
+                if (resposta) {
+                    // 3. Envia resposta da IA via WhatsApp
+                    await fetch(baseUrl + '/api/whatsapp/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ telefone, mensagem: resposta })
+                    })
+
+                    // 4. Salva resposta da IA no Airtable
+                    await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            Authorization: 'Bearer ' + apiKey,
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            fields: {
+                                telefone,
+                                mensagem: resposta,
+                                tipo: 'enviada',
+                                horario: new Date().toISOString(),
+                                empresa: 'FlowSMS Admin',
+                            }
+                        })
+                    })
+                }
+            }
         }
     } catch (e) {
         console.error('Webhook error:', e)

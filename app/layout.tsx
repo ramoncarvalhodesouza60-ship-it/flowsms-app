@@ -30,7 +30,12 @@ export default function RootLayout({
       <head>
         <meta name="facebook-domain-verification" content="ujieyjobwejxpd6aihkrdk743hz6pd" />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <footer style={{ textAlign: 'center', padding: '12px', fontSize: '11px', color: '#999' }}>
+          © 2026 FlowSMS | CNPJ 67.495.542/0001-53 | 67.495.542 RAMON DE CARVALHO SOUZA
+        </footer>
+      </body>
     </html>
   );
 }

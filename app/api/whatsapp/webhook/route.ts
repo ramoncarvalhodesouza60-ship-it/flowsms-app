@@ -22,6 +22,8 @@ export async function POST(req: NextRequest) {
         const changes = entry?.changes?.[0]
         const value = changes?.value
         const messages = value?.messages
+        const phoneNumberId = value?.metadata?.phone_number_id as string | undefined
+        console.log('PHONE NUMBER ID RECEBIDO:', phoneNumberId)
 
         if (messages && messages.length > 0) {
             const msg = messages[0]
@@ -31,10 +33,32 @@ export async function POST(req: NextRequest) {
 
             const baseId = process.env.AIRTABLE_BASE_ID
             const tableId = process.env.AIRTABLE_MENSAGENS_ID
+            const clientesId = process.env.AIRTABLE_CLIENTES_ID
             const apiKey = process.env.AIRTABLE_API_KEY
             const url = 'https://api.airtable.com/v0/' + baseId + '/' + tableId
+            const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://flowsms.com.br'
 
-            // 1. Salva mensagem recebida no Airtable
+            // 1. Busca o cliente pelo phone_number_id
+            let systemPrompt: string | null = null
+            let empresa = 'FlowSMS Admin'
+
+            if (phoneNumberId) {
+                const clientesUrl = 'https://api.airtable.com/v0/' + baseId + '/' + clientesId
+                    + '?filterByFormula=' + encodeURIComponent(`{phone_number_id}="${phoneNumberId}"`)
+
+                const clientesRes = await fetch(clientesUrl, {
+                    headers: { Authorization: 'Bearer ' + apiKey }
+                })
+                const clientesData = await clientesRes.json()
+                const cliente = clientesData.records?.[0]?.fields
+
+                if (cliente) {
+                    systemPrompt = cliente.system_prompt || null
+                    empresa = cliente.empresa || 'FlowSMS Admin'
+                }
+            }
+
+            // 2. Salva mensagem recebida no Airtable
             await fetch(url, {
                 method: 'POST',
                 headers: {
@@ -42,38 +66,30 @@ export async function POST(req: NextRequest) {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    fields: {
-                        telefone,
-                        mensagem: texto,
-                        tipo: 'recebida',
-                        horario,
-                        empresa: 'FlowSMS Admin',
-                    }
+                    fields: { telefone, mensagem: texto, tipo: 'recebida', horario, empresa }
                 })
             })
 
-            // 2. Chama a IA e responde automaticamente
+            // 3. Chama a IA com o system prompt do cliente
             if (texto) {
-                const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://flowsms.com.br'
-
                 const iaRes = await fetch(baseUrl + '/api/whatsapp/ia', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mensagem: texto, telefone })
+                    body: JSON.stringify({ mensagem: texto, systemPrompt })
                 })
 
                 const iaData = await iaRes.json()
                 const resposta = iaData.resposta
 
                 if (resposta) {
-                    // 3. Envia resposta da IA via WhatsApp
+                    // 4. Envia resposta da IA via WhatsApp
                     await fetch(baseUrl + '/api/whatsapp/send', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ telefone, mensagem: resposta })
                     })
 
-                    // 4. Salva resposta da IA no Airtable
+                    // 5. Salva resposta da IA no Airtable
                     await fetch(url, {
                         method: 'POST',
                         headers: {
@@ -86,7 +102,7 @@ export async function POST(req: NextRequest) {
                                 mensagem: resposta,
                                 tipo: 'enviada',
                                 horario: new Date().toISOString(),
-                                empresa: 'FlowSMS Admin',
+                                empresa
                             }
                         })
                     })

@@ -236,6 +236,11 @@ export default function Home() {
       const res = await fetch('/api/whatsapp/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telefone: waTelefone, mensagem: waMensagem }) })
       const data = await res.json()
       if (data.success) {
+        await fetch('/api/whatsapp/mensagens', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telefone: waTelefone, mensagem: waMensagem, tipo: 'enviada' })
+        })
         setWhatsAppUsados(prev => prev + 1)
         setWaStatus('✓ WhatsApp enviado!')
         setWaTelefone(''); setWaMensagem('')

@@ -92,6 +92,7 @@ export default function WhatsApp() {
     const inputArquivoRef = useRef<HTMLInputElement>(null)
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
     const audioChunksRef = useRef<Blob[]>([])
+    const mensagensEndRef = useRef<HTMLDivElement>(null)
 
     const horarioAtual = () => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
@@ -154,6 +155,9 @@ export default function WhatsApp() {
         carregarMensagens()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
+    useEffect(() => {
+        mensagensEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, [mensagensRaw])
 
     async function enviarMensagem() {
         if (!novaMensagem.trim() || !conversaSelecionada) return
@@ -573,6 +577,7 @@ export default function WhatsApp() {
                                     </div>
                                 </div>
                             ))}
+                            <div ref={mensagensEndRef} />
                         </div>
 
                         {/* INPUT */}

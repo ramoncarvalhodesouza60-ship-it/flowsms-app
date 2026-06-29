@@ -38,7 +38,7 @@ type MensagemAirtable = {
 }
 
 type Contato = {
-    id: string // usamos o telefone como id único do contato
+    id: string
     nome: string
     temNome: boolean
     telefone: string
@@ -57,12 +57,32 @@ type MensagemView = {
     midia?: { tipo: string; url: string; nome: string }
 }
 
+type ContatoCSV = {
+    nome: string
+    telefone: string
+}
+
+type ResultadoDisparo = {
+    telefone: string
+    sucesso: boolean
+    erro?: string
+}
+
 function formatarHora(iso: string) {
     try {
         return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     } catch {
         return iso
     }
+}
+
+// Normaliza telefone para o formato que a Meta espera: 5511999999999 (sem +, espaços ou símbolos)
+function normalizarTelefone(raw: string): string {
+    let limpo = raw.replace(/\D/g, '')
+    if (limpo.length >= 10 && !limpo.startsWith('55')) {
+        limpo = '55' + limpo
+    }
+    return limpo
 }
 
 export default function WhatsApp() {
@@ -75,7 +95,7 @@ export default function WhatsApp() {
     const [novaMensagem, setNovaMensagem] = useState('')
     const [busca, setBusca] = useState('')
     const [iaAtiva, setIaAtiva] = useState(true)
-    const [view, setView] = useState<'conversas' | 'kanban'>('conversas')
+    const [view, setView] = useState<'conversas' | 'kanban' | 'disparos'>('conversas')
     const [dragId, setDragId] = useState<string | null>(null)
     const [mostrarRespostas, setMostrarRespostas] = useState(false)
     const [mostrarTags, setMostrarTags] = useState(false)
@@ -87,16 +107,29 @@ export default function WhatsApp() {
     const [nomeParaCadastro, setNomeParaCadastro] = useState('')
     const [mostrarCadastro, setMostrarCadastro] = useState(false)
 
+    // ESTADOS DA TELA DE DISPAROS
+    const [contatosCSV, setContatosCSV] = useState<ContatoCSV[]>([])
+    const [nomeArquivoCSV, setNomeArquivoCSV] = useState('')
+    const [templateName, setTemplateName] = useState('oferta_construcao')
+    const [languageCode, setLanguageCode] = useState('pt_BR')
+    const [quantidadeDisparo, setQuantidadeDisparo] = useState(100)
+    const [jaEnviadosSet, setJaEnviadosSet] = useState<Set<string>>(new Set())
+    const [disparando, setDisparando] = useState(false)
+    const [progressoAtual, setProgressoAtual] = useState(0)
+    const [progressoTotal, setProgressoTotal] = useState(0)
+    const [resultadosDisparo, setResultadosDisparo] = useState<ResultadoDisparo[]>([])
+    const [erroDisparo, setErroDisparo] = useState<string | null>(null)
+
     const inputFotoRef = useRef<HTMLInputElement>(null)
     const inputVideoRef = useRef<HTMLInputElement>(null)
     const inputArquivoRef = useRef<HTMLInputElement>(null)
+    const inputCSVRef = useRef<HTMLInputElement>(null)
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
     const audioChunksRef = useRef<Blob[]>([])
     const mensagensEndRef = useRef<HTMLDivElement>(null)
 
     const horarioAtual = () => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
-    // Busca mensagens do Airtable e monta a lista de contatos agrupando por telefone
     async function carregarMensagens() {
         try {
             setCarregando(true)
@@ -110,7 +143,6 @@ export default function WhatsApp() {
             }
             setMensagensRaw(data)
 
-            // Agrupa por telefone para montar a lista de contatos
             const porTelefone = new Map<string, MensagemAirtable[]>()
             data.forEach((m: MensagemAirtable) => {
                 if (!m.telefone) return
@@ -137,7 +169,6 @@ export default function WhatsApp() {
                 })
             })
 
-            // Ordena pelo mais recente
             novosContatos.sort((a, b) => (a.horario < b.horario ? 1 : -1))
 
             setContatos(novosContatos)
@@ -165,7 +196,6 @@ export default function WhatsApp() {
         setNovaMensagem('')
         setEnviando(true)
 
-        // Atualiza tela imediatamente (otimista)
         const otimista: MensagemAirtable = {
             id: 'temp-' + Date.now(),
             telefone: conversaSelecionada.telefone,
@@ -177,21 +207,18 @@ export default function WhatsApp() {
         setMensagensRaw(prev => [...prev, otimista])
 
         try {
-            // 1. Envia de fato via WhatsApp (Meta)
             await fetch('/api/whatsapp/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ telefone: conversaSelecionada.telefone, mensagem: texto }),
             })
 
-            // 2. Salva no Airtable como histórico
             await fetch('/api/whatsapp/mensagens', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ telefone: conversaSelecionada.telefone, mensagem: texto, tipo: 'enviada' }),
             })
 
-            // 3. Recarrega para refletir o estado real do Airtable
             await carregarMensagens()
         } catch (e) {
             setErro('Falha ao enviar mensagem.')
@@ -200,7 +227,6 @@ export default function WhatsApp() {
         }
     }
 
-    // Sobe o arquivo para o Vercel Blob (via /api/whatsapp/upload) e devolve a URL pública
     async function subirArquivo(arquivo: File | Blob, nomeArquivo: string): Promise<string | null> {
         try {
             const formData = new FormData()
@@ -334,9 +360,125 @@ export default function WhatsApp() {
         })
     }
 
+    // ===== FUNÇÕES DA TELA DE DISPAROS =====
+
+    function processarCSV(texto: string): ContatoCSV[] {
+        const linhas = texto.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+        const resultado: ContatoCSV[] = []
+
+        for (let i = 0; i < linhas.length; i++) {
+            const linha = linhas[i]
+            // Pula cabeçalho se a primeira linha não tiver números
+            if (i === 0 && !/\d/.test(linha)) continue
+
+            const partes = linha.split(',').map(p => p.trim().replace(/^"|"$/g, ''))
+            if (partes.length === 0) continue
+
+            let nome = ''
+            let telefoneRaw = ''
+
+            if (partes.length >= 2) {
+                nome = partes[0]
+                telefoneRaw = partes[1]
+            } else {
+                telefoneRaw = partes[0]
+                nome = ''
+            }
+
+            const telefone = normalizarTelefone(telefoneRaw)
+            if (telefone.length >= 12) {
+                resultado.push({ nome: nome || telefone, telefone })
+            }
+        }
+
+        return resultado
+    }
+
+    function handleUploadCSV(arquivo: File) {
+        setNomeArquivoCSV(arquivo.name)
+        setErroDisparo(null)
+        setResultadosDisparo([])
+        const reader = new FileReader()
+        reader.onload = (e) => {
+            const texto = e.target?.result as string
+            const lista = processarCSV(texto)
+            if (lista.length === 0) {
+                setErroDisparo('Nenhum contato válido encontrado no arquivo. Verifique o formato: Nome,Telefone')
+                return
+            }
+            setContatosCSV(lista)
+            if (lista.length < quantidadeDisparo) {
+                setQuantidadeDisparo(lista.length)
+            }
+        }
+        reader.onerror = () => setErroDisparo('Erro ao ler o arquivo CSV.')
+        reader.readAsText(arquivo, 'UTF-8')
+    }
+
+    // Filtra os contatos que ainda não receberam disparo nesta sessão, até a quantidade selecionada
+    function obterContatosParaDisparo(): ContatoCSV[] {
+        const disponiveis = contatosCSV.filter(c => !jaEnviadosSet.has(c.telefone))
+        return disponiveis.slice(0, quantidadeDisparo)
+    }
+
+    async function executarDisparo() {
+        const lista = obterContatosParaDisparo()
+        if (lista.length === 0) {
+            setErroDisparo('Não há contatos novos disponíveis para disparo. Importe um novo CSV ou aumente a quantidade.')
+            return
+        }
+        if (!templateName.trim()) {
+            setErroDisparo('Informe o nome do template aprovado pela Meta.')
+            return
+        }
+
+        setDisparando(true)
+        setErroDisparo(null)
+        setResultadosDisparo([])
+        setProgressoTotal(lista.length)
+        setProgressoAtual(0)
+
+        const telefones = lista.map(c => c.telefone)
+
+        try {
+            const res = await fetch('/api/whatsapp/disparar-template', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contatos: telefones, templateName, languageCode }),
+            })
+            const data = await res.json()
+
+            if (data.success) {
+                setResultadosDisparo(data.resultados || [])
+                setProgressoAtual(lista.length)
+
+                // Marca todos como enviados (sucesso ou falha) para não tentar de novo automaticamente
+                setJaEnviadosSet(prev => {
+                    const novo = new Set(prev)
+                    telefones.forEach(t => novo.add(t))
+                    return novo
+                })
+            } else {
+                setErroDisparo(data.error || 'Erro ao disparar campanha.')
+            }
+        } catch (e: any) {
+            setErroDisparo('Erro ao disparar: ' + e.message)
+        } finally {
+            setDisparando(false)
+        }
+    }
+
+    function limparCampanha() {
+        setContatosCSV([])
+        setNomeArquivoCSV('')
+        setResultadosDisparo([])
+        setErroDisparo(null)
+        setProgressoAtual(0)
+        setProgressoTotal(0)
+    }
+
     const conversasFiltradas = contatos.filter(c => c.nome.toLowerCase().includes(busca.toLowerCase()) || c.telefone.includes(busca))
 
-    // Detecta se a mensagem é uma mídia salva com prefixo [tipo] e extrai a URL
     function extrairMidia(texto: string | null | undefined): { tipo: string; url: string; nome: string } | null {
         if (!texto) return null
         const match = texto.match(/^\[(audio|imagem|video|arquivo)\]\s*(.+)$/)
@@ -387,6 +529,10 @@ export default function WhatsApp() {
         )
     }
 
+    const disponiveisParaDisparo = contatosCSV.filter(c => !jaEnviadosSet.has(c.telefone)).length
+    const enviadosNestaCampanha = resultadosDisparo.filter(r => r.sucesso).length
+    const falhasNestaCampanha = resultadosDisparo.filter(r => !r.sucesso).length
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0a0a0a', fontFamily: 'Arial, sans-serif' }}>
 
@@ -409,6 +555,9 @@ export default function WhatsApp() {
                         <button onClick={() => setView('kanban')} style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 600, background: view === 'kanban' ? '#FF6B00' : 'transparent', color: view === 'kanban' ? 'white' : '#555', fontFamily: 'Arial' }}>
                             📋 Kanban
                         </button>
+                        <button onClick={() => setView('disparos')} style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 600, background: view === 'disparos' ? '#FF6B00' : 'transparent', color: view === 'disparos' ? 'white' : '#555', fontFamily: 'Arial' }}>
+                            🚀 Disparos
+                        </button>
                     </div>
                     <div onClick={() => setIaAtiva(!iaAtiva)} style={{ background: iaAtiva ? '#22c55e22' : '#55555522', color: iaAtiva ? '#22c55e' : '#555', padding: '6px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: `1px solid ${iaAtiva ? '#22c55e33' : '#33333333'}` }}>
                         {iaAtiva ? '🤖 IA Ativa' : '👤 Manual'}
@@ -416,7 +565,130 @@ export default function WhatsApp() {
                 </div>
             </div>
 
-            {contatos.length === 0 && (
+            {/* VIEW DISPAROS */}
+            {view === 'disparos' && (
+                <div style={{ flex: 1, overflowY: 'auto', padding: '32px', display: 'flex', justifyContent: 'center' }}>
+                    <div style={{ maxWidth: '720px', width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+                        <div>
+                            <h2 style={{ color: 'white', fontSize: '20px', fontWeight: 800, margin: 0 }}>🚀 Disparo em Massa por Template</h2>
+                            <p style={{ color: '#666', fontSize: '13px', marginTop: '4px' }}>Importe sua lista, escolha a quantidade e dispare o template aprovado pela Meta.</p>
+                        </div>
+
+                        {erroDisparo && (
+                            <div style={{ background: 'rgba(243,139,168,0.1)', border: '1px solid rgba(243,139,168,0.3)', color: '#f38ba8', padding: '12px 16px', borderRadius: '10px', fontSize: '13px' }}>
+                                ⚠️ {erroDisparo}
+                            </div>
+                        )}
+
+                        {/* PASSO 1: UPLOAD CSV */}
+                        <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: '14px', padding: '20px' }}>
+                            <div style={{ color: '#FF6B00', fontSize: '13px', fontWeight: 700, marginBottom: '12px' }}>1. Importar lista de contatos</div>
+                            <input ref={inputCSVRef} type="file" accept=".csv,.txt" style={{ display: 'none' }}
+                                onChange={e => e.target.files?.[0] && handleUploadCSV(e.target.files[0])} />
+                            <button onClick={() => inputCSVRef.current?.click()}
+                                style={{ background: '#1a1a1a', border: '1px dashed #333', color: '#888', padding: '16px', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', width: '100%', fontFamily: 'Arial' }}>
+                                📁 {nomeArquivoCSV || 'Clique para selecionar arquivo CSV'}
+                            </button>
+                            <div style={{ color: '#444', fontSize: '11px', marginTop: '8px' }}>Formato esperado: Nome,Telefone (uma linha por contato). Se não tiver nome, só o telefone também funciona.</div>
+
+                            {contatosCSV.length > 0 && (
+                                <div style={{ marginTop: '14px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+                                    <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', padding: '8px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600 }}>
+                                        ✓ {contatosCSV.length} contatos carregados
+                                    </div>
+                                    <div style={{ color: '#666', fontSize: '12px' }}>
+                                        {disponiveisParaDisparo} ainda não receberam disparo nesta sessão
+                                    </div>
+                                    <button onClick={limparCampanha} style={{ background: 'none', border: 'none', color: '#555', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline', marginLeft: 'auto' }}>
+                                        Limpar lista
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* PASSO 2: CONFIGURAÇÃO DO TEMPLATE */}
+                        <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: '14px', padding: '20px' }}>
+                            <div style={{ color: '#FF6B00', fontSize: '13px', fontWeight: 700, marginBottom: '12px' }}>2. Configurar template</div>
+                            <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ color: '#666', fontSize: '11px', display: 'block', marginBottom: '6px' }}>Nome do template aprovado</label>
+                                    <input value={templateName} onChange={e => setTemplateName(e.target.value)}
+                                        style={{ width: '100%', padding: '10px 14px', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '8px', color: 'white', fontSize: '13px', outline: 'none', boxSizing: 'border-box', fontFamily: 'Arial' }} />
+                                </div>
+                                <div style={{ width: '120px' }}>
+                                    <label style={{ color: '#666', fontSize: '11px', display: 'block', marginBottom: '6px' }}>Idioma</label>
+                                    <input value={languageCode} onChange={e => setLanguageCode(e.target.value)}
+                                        style={{ width: '100%', padding: '10px 14px', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '8px', color: 'white', fontSize: '13px', outline: 'none', boxSizing: 'border-box', fontFamily: 'Arial' }} />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* PASSO 3: QUANTIDADE */}
+                        <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: '14px', padding: '20px' }}>
+                            <div style={{ color: '#FF6B00', fontSize: '13px', fontWeight: 700, marginBottom: '12px' }}>3. Quantidade de disparos nesta campanha</div>
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                <input type="number" min={1} max={disponiveisParaDisparo || 1} value={quantidadeDisparo}
+                                    onChange={e => setQuantidadeDisparo(Math.max(1, parseInt(e.target.value) || 1))}
+                                    style={{ width: '120px', padding: '10px 14px', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none', fontFamily: 'Arial', fontWeight: 700 }} />
+                                <span style={{ color: '#666', fontSize: '12px' }}>de {disponiveisParaDisparo} contatos disponíveis</span>
+                                {disponiveisParaDisparo > 0 && (
+                                    <button onClick={() => setQuantidadeDisparo(disponiveisParaDisparo)}
+                                        style={{ background: 'none', border: '1px solid #2a2a2a', color: '#888', padding: '8px 12px', borderRadius: '8px', fontSize: '11px', cursor: 'pointer', fontFamily: 'Arial' }}>
+                                        Selecionar todos
+                                    </button>
+                                )}
+                            </div>
+                            <div style={{ color: '#444', fontSize: '11px', marginTop: '8px' }}>
+                                Os contatos já disparados nesta sessão não serão reenviados automaticamente — isso evita duplicar mensagens para a mesma pessoa.
+                            </div>
+                        </div>
+
+                        {/* BOTÃO DE DISPARO */}
+                        <button onClick={executarDisparo} disabled={disparando || contatosCSV.length === 0}
+                            style={{
+                                background: disparando ? '#333' : '#FF6B00', border: 'none', color: 'white', padding: '16px',
+                                borderRadius: '12px', fontSize: '15px', fontWeight: 700, cursor: disparando || contatosCSV.length === 0 ? 'not-allowed' : 'pointer',
+                                fontFamily: 'Arial', opacity: contatosCSV.length === 0 ? 0.4 : 1
+                            }}>
+                            {disparando ? `Disparando... ${progressoAtual}/${progressoTotal}` : `🚀 Disparar para ${Math.min(quantidadeDisparo, disponiveisParaDisparo)} contatos`}
+                        </button>
+
+                        {/* BARRA DE PROGRESSO */}
+                        {disparando && (
+                            <div style={{ background: '#1a1a1a', borderRadius: '8px', height: '8px', overflow: 'hidden' }}>
+                                <div style={{ background: '#FF6B00', height: '100%', width: `${progressoTotal > 0 ? (progressoAtual / progressoTotal) * 100 : 0}%`, transition: 'width 0.3s' }} />
+                            </div>
+                        )}
+
+                        {/* RESULTADOS */}
+                        {resultadosDisparo.length > 0 && (
+                            <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: '14px', padding: '20px' }}>
+                                <div style={{ display: 'flex', gap: '16px', marginBottom: '14px' }}>
+                                    <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', padding: '10px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, flex: 1, textAlign: 'center' }}>
+                                        ✓ {enviadosNestaCampanha} enviados
+                                    </div>
+                                    {falhasNestaCampanha > 0 && (
+                                        <div style={{ background: 'rgba(243,139,168,0.1)', border: '1px solid rgba(243,139,168,0.3)', color: '#f38ba8', padding: '10px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, flex: 1, textAlign: 'center' }}>
+                                            ✗ {falhasNestaCampanha} falharam
+                                        </div>
+                                    )}
+                                </div>
+                                <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                                    {resultadosDisparo.map((r, i) => (
+                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 4px', borderBottom: '1px solid #1a1a1a', fontSize: '12px' }}>
+                                            <span style={{ color: '#888' }}>{r.telefone}</span>
+                                            <span style={{ color: r.sucesso ? '#22c55e' : '#f38ba8' }}>{r.sucesso ? '✓ Enviado' : '✗ ' + (r.erro || 'Falhou')}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {contatos.length === 0 && view !== 'disparos' && (
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#555', fontFamily: 'Arial' }}>
                     <div style={{ fontSize: '36px', opacity: 0.4 }}>💬</div>
                     <div style={{ fontSize: '14px', fontWeight: 600, color: '#777' }}>Nenhuma conversa ainda</div>
@@ -714,3 +986,6 @@ export default function WhatsApp() {
         </div>
     )
 }
+
+
+

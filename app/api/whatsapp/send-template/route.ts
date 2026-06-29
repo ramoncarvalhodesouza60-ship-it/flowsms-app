@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     const phoneNumberId = process.env.WHATSAPP_PHONE_ID
     const token = process.env.WHATSAPP_TOKEN
 
-    const res = await fetch('https://graph.facebook.com/v18.0/' + phoneNumberId + '/messages', {
+    const res = await fetch('https://graph.facebook.com/v21.0/' + phoneNumberId + '/messages', {
         method: 'POST',
         headers: {
             'Authorization': 'Bearer ' + token,
@@ -27,8 +27,11 @@ export async function POST(req: NextRequest) {
     })
 
     const data = await res.json()
-    if (data.messages) {
-        return NextResponse.json({ success: true })
+    console.log('META RESPONSE:', JSON.stringify(data))
+
+    if (data.messages && data.messages[0]?.id) {
+        return NextResponse.json({ success: true, messageId: data.messages[0].id })
     }
+
     return NextResponse.json({ success: false, error: data })
 }

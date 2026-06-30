@@ -190,7 +190,7 @@ export default function Home() {
     }
     setEnviando(true); setStatus('')
     try {
-      const res = await fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telefone, mensagem, contatoId: null }) })
+      const res = await fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telefone, mensagem, contatoId: null, empresa: empresaAtual }) })
       const data = await res.json()
       if (data.success) {
         setSmsUsados(prev => prev + 1)
@@ -218,7 +218,7 @@ export default function Home() {
       if (!contato.telefone) continue
       if (smsUsados + enviados >= limite) break
       try {
-        const res = await fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telefone: contato.telefone, mensagem, contatoId: contato.id }) })
+        const res = await fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telefone: contato.telefone, mensagem, contatoId: contato.id, empresa: empresaAtual }) })
         const data = await res.json()
         if (data.success) enviados++; else erros++
       } catch { erros++ }
@@ -239,7 +239,7 @@ export default function Home() {
         await fetch('/api/whatsapp/mensagens', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ telefone: waTelefone, mensagem: waMensagem, tipo: 'enviada' })
+          body: JSON.stringify({ telefone: waTelefone, mensagem: waMensagem, tipo: 'enviada', empresa: empresaAtual })
         })
         setWhatsAppUsados(prev => prev + 1)
         setWaStatus('✓ WhatsApp enviado!')
@@ -258,7 +258,14 @@ export default function Home() {
       try {
         const res = await fetch('/api/whatsapp/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telefone: contato.telefone, mensagem: waMensagem }) })
         const data = await res.json()
-        if (data.success) enviados++; else erros++
+        if (data.success) {
+          enviados++
+          await fetch('/api/whatsapp/mensagens', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telefone: contato.telefone, mensagem: waMensagem, tipo: 'enviada', empresa: empresaAtual })
+          })
+        } else erros++
       } catch { erros++ }
     }
     setWhatsAppUsados(prev => prev + enviados)
@@ -271,6 +278,9 @@ export default function Home() {
   const limiteSMS = configEmpresa?.limiteSMS || 1
   const porcentagemSMS = Math.min((smsUsados / limiteSMS) * 100, 100)
   const corBarra = porcentagemSMS >= 90 ? '#f38ba8' : porcentagemSMS >= 70 ? '#f9e2af' : '#FF6B00'
+
+  // Link para a página de WhatsApp já carregando a empresa logada via query string
+  const linkWhatsApp = '/whatsapp?empresa=' + encodeURIComponent(empresaAtual)
 
   if (!logado) return (
     <main style={{ background: '#070709', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -476,7 +486,7 @@ export default function Home() {
         {abaAtiva === 'whatsapp' && (
           <div style={{ background: 'rgba(255,107,0,0.03)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '28px' }}>
             <h2 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '16px' }}>💬 WhatsApp</h2>
-            <a href="/whatsapp" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#25d366', color: 'white', padding: '10px 20px', borderRadius: '10px', textDecoration: 'none', fontSize: '13px', fontWeight: 800, marginBottom: '24px' }}>
+            <a href={linkWhatsApp} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#25d366', color: 'white', padding: '10px 20px', borderRadius: '10px', textDecoration: 'none', fontSize: '13px', fontWeight: 800, marginBottom: '24px' }}>
               💬 Abrir Conversas ao Vivo →
             </a>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px', marginBottom: '28px' }}>
@@ -545,4 +555,10 @@ export default function Home() {
     </main>
   )
 }
+
+
+
+
+
+
 

@@ -5,7 +5,7 @@ const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process
 
 export async function POST(request: Request) {
   try {
-    const { telefone, mensagem, contatoId } = await request.json()
+    const { telefone, mensagem, contatoId, empresa } = await request.json()
     const numero = telefone.replace(/\D/g, '')
     const key = process.env.SMSDEV_API_KEY
     const url = 'https://api.smsdev.com.br/v1/send?key=' + key + '&type=9&number=' + numero + '&msg=' + encodeURIComponent(mensagem)
@@ -18,6 +18,17 @@ export async function POST(request: Request) {
           'SMS Enviados': true
         })
       }
+
+      // Registra o envio na tabela Mensagens para contagem real do limite mensal,
+      // cobrindo tanto envio avulso quanto em massa.
+      await base('Mensagens').create({
+        'telefone': telefone,
+        'mensagem': mensagem,
+        'tipo': 'sms',
+        'horario': new Date().toISOString(),
+        'empresa': empresa || '',
+      })
+
       return NextResponse.json({ success: true })
     }
     return NextResponse.json({ success: true })

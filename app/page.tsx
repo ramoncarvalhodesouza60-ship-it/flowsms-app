@@ -16,7 +16,7 @@ const empresas: any[] = [
     email: 'nycollas@empresa.com',
     senha: 'nycollas123',
     empresa: 'Empresa Nycollas',
-    whatsapp: false,
+    whatsapp: true,
     ramal: false,
     ramalNumero: null,
     limiteSMS: 20000,

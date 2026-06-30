@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 const tagsDisponiveis = [
@@ -87,6 +87,18 @@ function normalizarTelefone(raw: string): string {
 }
 
 export default function WhatsApp() {
+    return (
+        <Suspense fallback={
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0a0a0a', color: '#555', fontFamily: 'Arial' }}>
+                Carregando...
+            </div>
+        }>
+            <WhatsAppConteudo />
+        </Suspense>
+    )
+}
+
+function WhatsAppConteudo() {
     const searchParams = useSearchParams()
     const empresaAtual = searchParams.get('empresa') || ''
 

@@ -1,5 +1,6 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 
 const tagsDisponiveis = [
     { id: 'quente', label: 'Quente', cor: '#f38ba8', bg: 'rgba(243,139,168,0.15)' },
@@ -86,6 +87,9 @@ function normalizarTelefone(raw: string): string {
 }
 
 export default function WhatsApp() {
+    const searchParams = useSearchParams()
+    const empresaAtual = searchParams.get('empresa') || ''
+
     const [carregando, setCarregando] = useState(true)
     const [erro, setErro] = useState<string | null>(null)
     const [mensagensRaw, setMensagensRaw] = useState<MensagemAirtable[]>([])
@@ -134,7 +138,7 @@ export default function WhatsApp() {
         try {
             setCarregando(true)
             setErro(null)
-            const res = await fetch('/api/whatsapp/mensagens')
+            const res = await fetch('/api/whatsapp/mensagens?empresa=' + encodeURIComponent(empresaAtual))
             const data = await res.json()
             if (!Array.isArray(data)) {
                 setErro('Não foi possível carregar as mensagens.')
@@ -185,7 +189,7 @@ export default function WhatsApp() {
     useEffect(() => {
         carregarMensagens()
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    }, [empresaAtual])
     useEffect(() => {
         mensagensEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [mensagensRaw])
@@ -216,7 +220,7 @@ export default function WhatsApp() {
             await fetch('/api/whatsapp/mensagens', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ telefone: conversaSelecionada.telefone, mensagem: texto, tipo: 'enviada' }),
+                body: JSON.stringify({ telefone: conversaSelecionada.telefone, mensagem: texto, tipo: 'enviada', empresa: empresaAtual }),
             })
 
             await carregarMensagens()
@@ -263,7 +267,7 @@ export default function WhatsApp() {
             await fetch('/api/whatsapp/mensagens', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ telefone: conversaSelecionada.telefone, mensagem: '[' + tipoLabel + '] ' + urlPublica, tipo: 'enviada' }),
+                body: JSON.stringify({ telefone: conversaSelecionada.telefone, mensagem: '[' + tipoLabel + '] ' + urlPublica, tipo: 'enviada', empresa: empresaAtual }),
             })
 
             await carregarMensagens()
@@ -307,7 +311,7 @@ export default function WhatsApp() {
                         await fetch('/api/whatsapp/mensagens', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ telefone: conversaSelecionada.telefone, mensagem: '[audio] ' + urlPublica, tipo: 'enviada' }),
+                            body: JSON.stringify({ telefone: conversaSelecionada.telefone, mensagem: '[audio] ' + urlPublica, tipo: 'enviada', empresa: empresaAtual }),
                         })
 
                         await carregarMensagens()
@@ -986,6 +990,3 @@ export default function WhatsApp() {
         </div>
     )
 }
-
-
-

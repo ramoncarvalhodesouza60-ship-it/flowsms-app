@@ -41,10 +41,12 @@ export async function POST(req: NextRequest) {
             // 1. Busca o cliente pelo phone_number_id
             let systemPrompt: string | null = null
             let empresa = 'FlowSMS Admin'
+            let clienteToken: string | null = null
+            let clientePhoneNumberId: string | null = null
 
             if (phoneNumberId) {
                 const clientesUrl = 'https://api.airtable.com/v0/' + baseId + '/' + clientesId
-                    + '?filterByFormula=' + encodeURIComponent(`{phone_number_id}="${phoneNumberId}"`)
+                    + '?filterByFormula=' + encodeURIComponent('{phone_number_id}="' + phoneNumberId + '"')
 
                 const clientesRes = await fetch(clientesUrl, {
                     headers: { Authorization: 'Bearer ' + apiKey }
@@ -55,6 +57,8 @@ export async function POST(req: NextRequest) {
                 if (cliente) {
                     systemPrompt = cliente.system_prompt || null
                     empresa = cliente.empresa || 'FlowSMS Admin'
+                    clienteToken = cliente.whatsapp_token || null
+                    clientePhoneNumberId = cliente.phone_number_id || null
                 }
             }
 
@@ -82,11 +86,16 @@ export async function POST(req: NextRequest) {
                 const resposta = iaData.resposta
 
                 if (resposta) {
-                    // 4. Envia resposta da IA via WhatsApp
+                    // 4. Envia resposta da IA via WhatsApp usando token e phone_number_id do cliente
                     await fetch(baseUrl + '/api/whatsapp/send', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ telefone, mensagem: resposta })
+                        body: JSON.stringify({
+                            telefone,
+                            mensagem: resposta,
+                            token: clienteToken,
+                            phoneNumberId: clientePhoneNumberId,
+                        })
                     })
 
                     // 5. Salva resposta da IA no Airtable
@@ -111,6 +120,8 @@ export async function POST(req: NextRequest) {
         }
     } catch (e) {
         console.error('Webhook error:', e)
+        console.error('Webhook error details:', JSON.stringify(e))
     }
-    return NextResponse.json({ status: 'ok' })
+
+    return new NextResponse('OK', { status: 200 })
 }

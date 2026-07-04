@@ -5,10 +5,12 @@ export async function POST(req: NextRequest) {
     const telefone = body.telefone
     const mensagem = body.mensagem
 
-    const token = process.env.WHATSAPP_TOKEN
-    const phoneId = process.env.WHATSAPP_PHONE_ID
+    // Suporta token e phoneNumberId por cliente (passados pelo webhook)
+    // Se não informados, usa as variáveis de ambiente globais (conta admin)
+    const token = body.token || process.env.WHATSAPP_TOKEN
+    const phoneId = body.phoneNumberId || process.env.WHATSAPP_PHONE_ID
 
-    const url = 'https://graph.facebook.com/v19.0/' + phoneId + '/messages'
+    const url = 'https://graph.facebook.com/v21.0/' + phoneId + '/messages'
 
     const res = await fetch(url, {
         method: 'POST',
@@ -25,6 +27,8 @@ export async function POST(req: NextRequest) {
     })
 
     const data = await res.json()
+    console.log('SEND RESPONSE:', JSON.stringify(data))
+
     if (data.messages) {
         return NextResponse.json({ success: true })
     }

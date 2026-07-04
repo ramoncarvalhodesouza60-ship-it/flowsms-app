@@ -118,7 +118,6 @@ export default function Home() {
   const [filtroStatus, setFiltroStatus] = useState('Todos')
   const [smsUsados, setSmsUsados] = useState(0)
   const [whatsAppUsados, setWhatsAppUsados] = useState(0)
-  // WhatsApp states
   const [waTelefone, setWaTelefone] = useState('')
   const [waMensagem, setWaMensagem] = useState('')
   const [waStatus, setWaStatus] = useState('')
@@ -133,13 +132,25 @@ export default function Home() {
     } else setErro('Email ou senha incorretos')
   }
 
+  // Carrega uso real do Airtable via /api/uso
+  async function carregarUso(empresa: string) {
+    try {
+      const res = await fetch('/api/uso?empresa=' + encodeURIComponent(empresa))
+      const data = await res.json()
+      if (data.success) {
+        setSmsUsados(data.sms.usados)
+        setWhatsAppUsados(data.whatsapp.usados)
+      }
+    } catch (e) {
+      console.error('Erro ao carregar uso:', e)
+    }
+  }
+
   async function carregarContatos() {
     const res = await fetch('/api/contatos?empresa=' + encodeURIComponent(empresaAtual))
     const data = await res.json()
     if (Array.isArray(data)) {
       setContatos(data)
-      const enviados = data.filter((c: any) => c.smsEnviado).length
-      setSmsUsados(enviados)
     }
   }
 
@@ -171,7 +182,12 @@ export default function Home() {
     carregarContatos()
   }
 
-  useEffect(() => { if (logado) carregarContatos() }, [logado])
+  useEffect(() => {
+    if (logado && empresaAtual) {
+      carregarContatos()
+      carregarUso(empresaAtual)
+    }
+  }, [logado, empresaAtual])
 
   async function adicionarContato() {
     if (!novoNome || !novoTel) return
@@ -251,10 +267,14 @@ export default function Home() {
 
   async function dispararWhatsAppParaTodos() {
     if (!waMensagem) { setWaStatus('Digite a mensagem!'); return }
+    const limite = configEmpresa?.limiteWhatsApp || 0
+    const disponiveis = limite - whatsAppUsados
+    if (disponiveis <= 0) { setWaStatus('❌ Limite de WhatsApp atingido!'); return }
     setWaEnviando(true)
     let enviados = 0, erros = 0
     for (const contato of contatos) {
       if (!contato.telefone) continue
+      if (whatsAppUsados + enviados >= limite) break
       try {
         const res = await fetch('/api/whatsapp/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telefone: contato.telefone, mensagem: waMensagem }) })
         const data = await res.json()
@@ -276,10 +296,10 @@ export default function Home() {
   const initials = empresaAtual.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
   const contatosFiltrados = contatos.filter((c: any) => filtroStatus === 'Todos' || c.status === filtroStatus)
   const limiteSMS = configEmpresa?.limiteSMS || 1
+  const limiteWhatsApp = configEmpresa?.limiteWhatsApp || 1
   const porcentagemSMS = Math.min((smsUsados / limiteSMS) * 100, 100)
+  const porcentagemWA = Math.min((whatsAppUsados / limiteWhatsApp) * 100, 100)
   const corBarra = porcentagemSMS >= 90 ? '#f38ba8' : porcentagemSMS >= 70 ? '#f9e2af' : '#FF6B00'
-
-  // Link para a página de WhatsApp já carregando a empresa logada via query string
   const linkWhatsApp = '/whatsapp?empresa=' + encodeURIComponent(empresaAtual)
 
   if (!logado) return (
@@ -315,8 +335,6 @@ export default function Home() {
   return (
     <main style={{ background: '#070709', minHeight: '100vh', fontFamily: "'Plus Jakarta Sans', sans-serif", color: 'white' }}>
       <BgFx />
-
-      {/* Navbar */}
       <nav className="z1" style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(7,7,9,0.85)', borderBottom: '1px solid rgba(255,107,0,0.1)', padding: '0 32px', height: '64px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backdropFilter: 'blur(20px)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
           <span style={{ color: '#FF6B00', fontSize: '20px', fontWeight: 900, fontFamily: "'Space Mono', monospace" }}>Flow</span>
@@ -330,8 +348,6 @@ export default function Home() {
       </nav>
 
       <div className="z1" style={{ padding: '32px', maxWidth: '960px', margin: '0 auto' }}>
-
-        {/* Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px', marginBottom: '32px' }}>
           <div className="card" style={{ background: 'rgba(255,107,0,0.04)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '24px', cursor: 'default' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
@@ -375,7 +391,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Tabs */}
         <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.03)', borderRadius: '14px', padding: '4px', width: 'fit-content', marginBottom: '24px' }}>
           {[
             ['sms', '📨 Disparar SMS'],
@@ -387,7 +402,6 @@ export default function Home() {
           ))}
         </div>
 
-        {/* SMS */}
         {abaAtiva === 'sms' && (
           <div style={{ background: 'rgba(255,107,0,0.03)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '28px' }}>
             <h2 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '24px' }}>Disparar SMS</h2>
@@ -406,7 +420,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Contatos */}
         {abaAtiva === 'contatos' && (
           <div style={{ background: 'rgba(255,107,0,0.03)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '28px' }}>
             <h2 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '24px' }}>Contatos</h2>
@@ -467,7 +480,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Ramal */}
         {abaAtiva === 'ramal' && (
           <div style={{ background: 'rgba(255,107,0,0.03)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '28px' }}>
             <h2 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '8px' }}>Ramal Virtual</h2>
@@ -482,7 +494,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* WhatsApp */}
         {abaAtiva === 'whatsapp' && (
           <div style={{ background: 'rgba(255,107,0,0.03)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '28px' }}>
             <h2 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '16px' }}>💬 WhatsApp</h2>
@@ -504,20 +515,23 @@ export default function Home() {
                 </div>
               ))}
             </div>
-            <input type="text" placeholder="Telefone (+5511999999999)" value={waTelefone} onChange={e => setWaTelefone(e.target.value)} style={{ ...inp, marginBottom: '12px' }} />
-            <textarea placeholder="Digite a mensagem WhatsApp..." rows={4} value={waMensagem} onChange={e => setWaMensagem(e.target.value)} style={{ ...inp, marginBottom: '16px', resize: 'none' as const }} />
-            {waStatus && <div style={{ background: waStatus.includes('✓') ? 'rgba(37,211,102,0.1)' : 'rgba(243,139,168,0.1)', border: `1px solid ${waStatus.includes('✓') ? 'rgba(37,211,102,0.25)' : 'rgba(243,139,168,0.25)'}`, borderRadius: '10px', padding: '10px 14px', color: waStatus.includes('✓') ? '#25d366' : '#f38ba8', fontSize: '13px', marginBottom: '16px' }}>{waStatus}</div>}
             {configEmpresa?.limiteWhatsApp !== 999999 && (
-              <div style={{ marginBottom: '16px', background: 'rgba(37,211,102,0.06)', border: '1px solid rgba(37,211,102,0.15)', borderRadius: '10px', padding: '12px 16px' }}>
+              <div style={{ marginBottom: '20px', background: 'rgba(37,211,102,0.06)', border: '1px solid rgba(37,211,102,0.15)', borderRadius: '10px', padding: '12px 16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>Conversas WhatsApp usadas</span>
+                  <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>WhatsApp usados este mês</span>
                   <span style={{ fontSize: '11px', color: '#25d366', fontWeight: 700 }}>{whatsAppUsados} / {configEmpresa?.limiteWhatsApp}</span>
                 </div>
                 <div style={{ height: '4px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${Math.min((whatsAppUsados / (configEmpresa?.limiteWhatsApp || 1)) * 100, 100)}%`, background: whatsAppUsados >= (configEmpresa?.limiteWhatsApp || 0) * 0.9 ? '#f38ba8' : '#25d366', borderRadius: '4px', transition: 'width 0.5s ease' }} />
+                  <div style={{ height: '100%', width: `${porcentagemWA}%`, background: porcentagemWA >= 90 ? '#f38ba8' : '#25d366', borderRadius: '4px', transition: 'width 0.5s ease' }} />
+                </div>
+                <div style={{ fontSize: '11px', color: porcentagemWA >= 90 ? '#f38ba8' : 'rgba(255,255,255,0.2)', marginTop: '6px' }}>
+                  {porcentagemWA >= 90 ? '⚠️ Limite quase atingido!' : `${(limiteWhatsApp - whatsAppUsados).toLocaleString('pt-BR')} mensagens restantes`}
                 </div>
               </div>
             )}
+            <input type="text" placeholder="Telefone (+5511999999999)" value={waTelefone} onChange={e => setWaTelefone(e.target.value)} style={{ ...inp, marginBottom: '12px' }} />
+            <textarea placeholder="Digite a mensagem WhatsApp..." rows={4} value={waMensagem} onChange={e => setWaMensagem(e.target.value)} style={{ ...inp, marginBottom: '16px', resize: 'none' as const }} />
+            {waStatus && <div style={{ background: waStatus.includes('✓') ? 'rgba(37,211,102,0.1)' : 'rgba(243,139,168,0.1)', border: `1px solid ${waStatus.includes('✓') ? 'rgba(37,211,102,0.25)' : 'rgba(243,139,168,0.25)'}`, borderRadius: '10px', padding: '10px 14px', color: waStatus.includes('✓') ? '#25d366' : '#f38ba8', fontSize: '13px', marginBottom: '16px' }}>{waStatus}</div>}
             <div style={{ display: 'flex', gap: '12px', marginBottom: '28px' }}>
               <button onClick={enviarWhatsApp} disabled={waEnviando} style={{ flex: 1, padding: '14px', background: waEnviando ? '#333' : '#25d366', color: 'white', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 800, cursor: waEnviando ? 'not-allowed' : 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 {waEnviando ? 'Enviando...' : '💬 Enviar WhatsApp'}
@@ -555,10 +569,3 @@ export default function Home() {
     </main>
   )
 }
-
-
-
-
-
-
-

@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 const empresas: any[] = [
   {
@@ -99,6 +99,13 @@ const inp: React.CSSProperties = {
   transition: 'all .2s',
 }
 
+type ContatoCSV = { nome: string; telefone: string }
+type ResultadoSMS = { telefone: string; sucesso: boolean; erro?: string }
+
+function normalizarTelefone(raw: string): string {
+  return raw.replace(/\D/g, '')
+}
+
 export default function Home() {
   const [logado, setLogado] = useState(false)
   const [email, setEmail] = useState('')
@@ -123,6 +130,20 @@ export default function Home() {
   const [waStatus, setWaStatus] = useState('')
   const [waEnviando, setWaEnviando] = useState(false)
 
+  // Estados do disparo em massa SMS
+  const [smsSubAba, setSmsSubAba] = useState<'individual' | 'massa'>('individual')
+  const [smsCSV, setSmsCSV] = useState<ContatoCSV[]>([])
+  const [smsNomeArquivo, setSmsNomeArquivo] = useState('')
+  const [smsMensagemMassa, setSmsMensagemMassa] = useState('')
+  const [smsQuantidade, setSmsQuantidade] = useState(100)
+  const [smsJaEnviados, setSmsJaEnviados] = useState<Set<string>>(new Set())
+  const [smsDisparando, setSmsDisparando] = useState(false)
+  const [smsProgressoAtual, setSmsProgressoAtual] = useState(0)
+  const [smsProgressoTotal, setSmsProgressoTotal] = useState(0)
+  const [smsResultados, setSmsResultados] = useState<ResultadoSMS[]>([])
+  const [smsErroCampanha, setSmsErroCampanha] = useState<string | null>(null)
+  const inputSmsCSVRef = useRef<HTMLInputElement>(null)
+
   function entrar() {
     const encontrada = empresas.find(e => e.email === email && e.senha === senha)
     if (encontrada) {
@@ -132,7 +153,6 @@ export default function Home() {
     } else setErro('Email ou senha incorretos')
   }
 
-  // Carrega uso real do Airtable via /api/uso
   async function carregarUso(empresa: string) {
     try {
       const res = await fetch('/api/uso?empresa=' + encodeURIComponent(empresa))
@@ -149,9 +169,7 @@ export default function Home() {
   async function carregarContatos() {
     const res = await fetch('/api/contatos?empresa=' + encodeURIComponent(empresaAtual))
     const data = await res.json()
-    if (Array.isArray(data)) {
-      setContatos(data)
-    }
+    if (Array.isArray(data)) setContatos(data)
   }
 
   async function atualizarStatus(id: string, status: string) {
@@ -217,31 +235,98 @@ export default function Home() {
     setEnviando(false)
   }
 
-  async function dispararParaTodos() {
-    if (!mensagem) { setStatus('Digite a mensagem antes de disparar!'); return }
+  // ===== DISPARO EM MASSA SMS =====
+  function processarCSVSMS(texto: string): ContatoCSV[] {
+    const linhas = texto.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+    const resultado: ContatoCSV[] = []
+    for (let i = 0; i < linhas.length; i++) {
+      const linha = linhas[i]
+      if (i === 0 && !/\d/.test(linha)) continue
+      const partes = linha.split(',').map(p => p.trim().replace(/^"|"$/g, ''))
+      let nome = '', telefoneRaw = ''
+      if (partes.length >= 2) { nome = partes[0]; telefoneRaw = partes[1] }
+      else { telefoneRaw = partes[0]; nome = '' }
+      const tel = normalizarTelefone(telefoneRaw)
+      if (tel.length >= 10) resultado.push({ nome: nome || tel, telefone: tel })
+    }
+    return resultado
+  }
+
+  function handleUploadCSVSMS(arquivo: File) {
+    setSmsNomeArquivo(arquivo.name)
+    setSmsErroCampanha(null)
+    setSmsResultados([])
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const texto = e.target?.result as string
+      const lista = processarCSVSMS(texto)
+      if (lista.length === 0) { setSmsErroCampanha('Nenhum contato válido encontrado. Formato: Nome,Telefone'); return }
+      setSmsCSV(lista)
+      if (lista.length < smsQuantidade) setSmsQuantidade(lista.length)
+    }
+    reader.onerror = () => setSmsErroCampanha('Erro ao ler o arquivo.')
+    reader.readAsText(arquivo, 'UTF-8')
+  }
+
+  const smsDisponiveis = smsCSV.filter(c => !smsJaEnviados.has(c.telefone)).length
+
+  async function executarDisparoSMS() {
+    if (!smsMensagemMassa.trim()) { setSmsErroCampanha('Digite a mensagem antes de disparar.'); return }
     const limite = configEmpresa?.limiteSMS || 0
-    const disponiveis = limite - smsUsados
-    if (disponiveis <= 0) {
-      setStatus('❌ Limite de SMS atingido! Entre em contato para renovar seu plano.')
-      return
-    }
-    if (contatos.length > disponiveis) {
-      setStatus(`⚠️ Você só tem ${disponiveis} SMS disponíveis mas tem ${contatos.length} contatos. Serão enviados apenas ${disponiveis}.`)
-    }
-    setEnviando(true)
-    let enviados = 0, erros = 0
-    for (const contato of contatos) {
-      if (!contato.telefone) continue
-      if (smsUsados + enviados >= limite) break
+    const disponivelPlano = limite - smsUsados
+    if (disponivelPlano <= 0) { setSmsErroCampanha('❌ Limite de SMS atingido! Entre em contato para renovar seu plano.'); return }
+
+    const lista = smsCSV.filter(c => !smsJaEnviados.has(c.telefone)).slice(0, Math.min(smsQuantidade, disponivelPlano))
+    if (lista.length === 0) { setSmsErroCampanha('Não há contatos disponíveis para disparo.'); return }
+
+    setSmsDisparando(true)
+    setSmsErroCampanha(null)
+    setSmsResultados([])
+    setSmsProgressoTotal(lista.length)
+    setSmsProgressoAtual(0)
+
+    let enviados = 0
+    const resultados: ResultadoSMS[] = []
+
+    for (const contato of lista) {
       try {
-        const res = await fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telefone: contato.telefone, mensagem, contatoId: contato.id, empresa: empresaAtual }) })
+        const res = await fetch('/api/sms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telefone: contato.telefone, mensagem: smsMensagemMassa, contatoId: null, empresa: empresaAtual })
+        })
         const data = await res.json()
-        if (data.success) enviados++; else erros++
-      } catch { erros++ }
+        if (data.success) {
+          enviados++
+          resultados.push({ telefone: contato.telefone, sucesso: true })
+        } else {
+          resultados.push({ telefone: contato.telefone, sucesso: false, erro: data.error || 'Falhou' })
+        }
+      } catch (e: any) {
+        resultados.push({ telefone: contato.telefone, sucesso: false, erro: e.message })
+      }
+      setSmsProgressoAtual(prev => prev + 1)
+      // Pequeno delay para não sobrecarregar
+      await new Promise(r => setTimeout(r, 200))
     }
+
     setSmsUsados(prev => prev + enviados)
-    setStatus(`✓ ${enviados} enviados, ${erros} erros.`)
-    carregarContatos(); setEnviando(false)
+    setSmsResultados(resultados)
+    setSmsJaEnviados(prev => {
+      const novo = new Set(prev)
+      lista.forEach(c => novo.add(c.telefone))
+      return novo
+    })
+    setSmsDisparando(false)
+  }
+
+  function limparCampanhaSMS() {
+    setSmsCSV([])
+    setSmsNomeArquivo('')
+    setSmsResultados([])
+    setSmsErroCampanha(null)
+    setSmsProgressoAtual(0)
+    setSmsProgressoTotal(0)
   }
 
   async function enviarWhatsApp() {
@@ -252,11 +337,7 @@ export default function Home() {
       const res = await fetch('/api/whatsapp/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telefone: waTelefone, mensagem: waMensagem }) })
       const data = await res.json()
       if (data.success) {
-        await fetch('/api/whatsapp/mensagens', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ telefone: waTelefone, mensagem: waMensagem, tipo: 'enviada', empresa: empresaAtual })
-        })
+        await fetch('/api/whatsapp/mensagens', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telefone: waTelefone, mensagem: waMensagem, tipo: 'enviada', empresa: empresaAtual }) })
         setWhatsAppUsados(prev => prev + 1)
         setWaStatus('✓ WhatsApp enviado!')
         setWaTelefone(''); setWaMensagem('')
@@ -280,11 +361,7 @@ export default function Home() {
         const data = await res.json()
         if (data.success) {
           enviados++
-          await fetch('/api/whatsapp/mensagens', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ telefone: contato.telefone, mensagem: waMensagem, tipo: 'enviada', empresa: empresaAtual })
-          })
+          await fetch('/api/whatsapp/mensagens', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telefone: contato.telefone, mensagem: waMensagem, tipo: 'enviada', empresa: empresaAtual }) })
         } else erros++
       } catch { erros++ }
     }
@@ -301,6 +378,8 @@ export default function Home() {
   const porcentagemWA = Math.min((whatsAppUsados / limiteWhatsApp) * 100, 100)
   const corBarra = porcentagemSMS >= 90 ? '#f38ba8' : porcentagemSMS >= 70 ? '#f9e2af' : '#FF6B00'
   const linkWhatsApp = '/whatsapp?empresa=' + encodeURIComponent(empresaAtual)
+  const smsEnviadosCampanha = smsResultados.filter(r => r.sucesso).length
+  const smsFailsCampanha = smsResultados.filter(r => !r.sucesso).length
 
   if (!logado) return (
     <main style={{ background: '#070709', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -348,6 +427,7 @@ export default function Home() {
       </nav>
 
       <div className="z1" style={{ padding: '32px', maxWidth: '960px', margin: '0 auto' }}>
+        {/* Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px', marginBottom: '32px' }}>
           <div className="card" style={{ background: 'rgba(255,107,0,0.04)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '24px', cursor: 'default' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
@@ -356,9 +436,7 @@ export default function Home() {
             </div>
             <div style={{ fontSize: '32px', fontWeight: 900, color: '#FF6B00', lineHeight: 1, letterSpacing: '-1px' }}>
               {smsUsados.toLocaleString('pt-BR')}
-              {configEmpresa?.limiteSMS !== 999999 && (
-                <span style={{ fontSize: '14px', color: 'rgba(255,255,255,0.3)', fontWeight: 400 }}> / {configEmpresa?.limiteSMS?.toLocaleString('pt-BR')}</span>
-              )}
+              {configEmpresa?.limiteSMS !== 999999 && <span style={{ fontSize: '14px', color: 'rgba(255,255,255,0.3)', fontWeight: 400 }}> / {configEmpresa?.limiteSMS?.toLocaleString('pt-BR')}</span>}
             </div>
             {configEmpresa?.limiteSMS !== 999999 && (
               <>
@@ -371,7 +449,6 @@ export default function Home() {
               </>
             )}
           </div>
-
           <div className="card" style={{ background: 'rgba(255,107,0,0.04)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '24px', cursor: 'default' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
               <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>Contatos</span>
@@ -380,7 +457,6 @@ export default function Home() {
             <div style={{ fontSize: '40px', fontWeight: 900, color: '#74c7ec', lineHeight: 1, letterSpacing: '-1px' }}>{contatos.length}</div>
             <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.2)', marginTop: '8px' }}>na base de dados</div>
           </div>
-
           <div className="card" style={{ background: 'rgba(255,107,0,0.04)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '24px', cursor: 'default' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
               <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>Aguardando</span>
@@ -391,6 +467,7 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Tabs principais */}
         <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.03)', borderRadius: '14px', padding: '4px', width: 'fit-content', marginBottom: '24px' }}>
           {[
             ['sms', '📨 Disparar SMS'],
@@ -402,31 +479,141 @@ export default function Home() {
           ))}
         </div>
 
+        {/* ABA SMS */}
         {abaAtiva === 'sms' && (
           <div style={{ background: 'rgba(255,107,0,0.03)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '28px' }}>
-            <h2 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '24px' }}>Disparar SMS</h2>
-            <input type="text" placeholder="Telefone (+5511999999999)" value={telefone} onChange={e => setTelefone(e.target.value)} style={{ ...inp, marginBottom: '12px' }} />
-            <textarea placeholder="Digite a mensagem..." value={mensagem} onChange={e => setMensagem(e.target.value)} rows={4} style={{ ...inp, marginBottom: '6px', resize: 'none' }} />
-            <div style={{ textAlign: 'right', fontSize: '11px', color: mensagem.length > 140 ? '#f38ba8' : 'rgba(255,255,255,0.2)', marginBottom: '16px' }}>{mensagem.length}/160 caracteres</div>
-            {status && <div style={{ background: status.includes('✓') ? 'rgba(166,227,161,0.1)' : 'rgba(243,139,168,0.1)', border: `1px solid ${status.includes('✓') ? 'rgba(166,227,161,0.25)' : 'rgba(243,139,168,0.25)'}`, borderRadius: '10px', padding: '10px 14px', color: status.includes('✓') ? '#a6e3a1' : '#f38ba8', fontSize: '13px', marginBottom: '16px' }}>{status}</div>}
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button className="btn-main" onClick={dispararSMS} disabled={enviando || smsUsados >= limiteSMS} style={{ flex: 1, padding: '14px', background: (enviando || smsUsados >= limiteSMS) ? '#333' : '#FF6B00', color: 'white', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 800, cursor: (enviando || smsUsados >= limiteSMS) ? 'not-allowed' : 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: enviando ? 'none' : '0 4px 16px rgba(255,107,0,0.25)' }}>
-                {enviando ? 'Enviando...' : smsUsados >= limiteSMS ? '❌ Limite Atingido' : '📨 Enviar SMS'}
-              </button>
-              <button className="btn-ghost-hover" onClick={dispararParaTodos} disabled={enviando || smsUsados >= limiteSMS} style={{ flex: 1, padding: '14px', background: 'transparent', color: '#FF6B00', border: '1px solid rgba(255,107,0,0.4)', borderRadius: '10px', fontSize: '14px', fontWeight: 800, cursor: (enviando || smsUsados >= limiteSMS) ? 'not-allowed' : 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all .2s' }}>
-                {enviando ? 'Enviando...' : '🚀 Disparar para Todos'}
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h2 style={{ fontSize: '16px', fontWeight: 800 }}>Disparar SMS</h2>
+              <div style={{ display: 'flex', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', padding: '3px', gap: '2px' }}>
+                <button onClick={() => setSmsSubAba('individual')} style={{ padding: '6px 16px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 700, background: smsSubAba === 'individual' ? '#FF6B00' : 'transparent', color: smsSubAba === 'individual' ? 'white' : 'rgba(255,255,255,0.3)', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  📱 Individual
+                </button>
+                <button onClick={() => setSmsSubAba('massa')} style={{ padding: '6px 16px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 700, background: smsSubAba === 'massa' ? '#FF6B00' : 'transparent', color: smsSubAba === 'massa' ? 'white' : 'rgba(255,255,255,0.3)', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  🚀 Disparo em Massa
+                </button>
+              </div>
             </div>
+
+            {/* Sub-aba Individual */}
+            {smsSubAba === 'individual' && (
+              <>
+                <input type="text" placeholder="Telefone (+5511999999999)" value={telefone} onChange={e => setTelefone(e.target.value)} style={{ ...inp, marginBottom: '12px' }} />
+                <textarea placeholder="Digite a mensagem..." value={mensagem} onChange={e => setMensagem(e.target.value)} rows={4} style={{ ...inp, marginBottom: '6px', resize: 'none' }} />
+                <div style={{ textAlign: 'right', fontSize: '11px', color: mensagem.length > 140 ? '#f38ba8' : 'rgba(255,255,255,0.2)', marginBottom: '16px' }}>{mensagem.length}/160 caracteres</div>
+                {status && <div style={{ background: status.includes('✓') ? 'rgba(166,227,161,0.1)' : 'rgba(243,139,168,0.1)', border: `1px solid ${status.includes('✓') ? 'rgba(166,227,161,0.25)' : 'rgba(243,139,168,0.25)'}`, borderRadius: '10px', padding: '10px 14px', color: status.includes('✓') ? '#a6e3a1' : '#f38ba8', fontSize: '13px', marginBottom: '16px' }}>{status}</div>}
+                <button className="btn-main" onClick={dispararSMS} disabled={enviando || smsUsados >= limiteSMS} style={{ width: '100%', padding: '14px', background: (enviando || smsUsados >= limiteSMS) ? '#333' : '#FF6B00', color: 'white', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 800, cursor: (enviando || smsUsados >= limiteSMS) ? 'not-allowed' : 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {enviando ? 'Enviando...' : smsUsados >= limiteSMS ? '❌ Limite Atingido' : '📨 Enviar SMS'}
+                </button>
+              </>
+            )}
+
+            {/* Sub-aba Disparo em Massa */}
+            {smsSubAba === 'massa' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+                {smsErroCampanha && (
+                  <div style={{ background: 'rgba(243,139,168,0.1)', border: '1px solid rgba(243,139,168,0.3)', color: '#f38ba8', padding: '12px 16px', borderRadius: '10px', fontSize: '13px' }}>
+                    ⚠️ {smsErroCampanha}
+                  </div>
+                )}
+
+                {/* Passo 1: CSV */}
+                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,107,0,0.15)', borderRadius: '12px', padding: '16px' }}>
+                  <div style={{ color: '#FF6B00', fontSize: '12px', fontWeight: 700, marginBottom: '10px' }}>1. Importar lista de contatos</div>
+                  <input ref={inputSmsCSVRef} type="file" accept=".csv,.txt" style={{ display: 'none' }} onChange={e => e.target.files?.[0] && handleUploadCSVSMS(e.target.files[0])} />
+                  <button onClick={() => inputSmsCSVRef.current?.click()}
+                    style={{ background: 'rgba(255,107,0,0.05)', border: '1px dashed rgba(255,107,0,0.3)', color: '#888', padding: '14px', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', width: '100%', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    📁 {smsNomeArquivo || 'Clique para selecionar arquivo CSV'}
+                  </button>
+                  <div style={{ color: '#444', fontSize: '11px', marginTop: '6px' }}>Formato: Nome,Telefone (uma por linha). Só o telefone também funciona.</div>
+                  {smsCSV.length > 0 && (
+                    <div style={{ marginTop: '12px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 600 }}>
+                        ✓ {smsCSV.length} contatos carregados
+                      </div>
+                      <div style={{ color: '#666', fontSize: '12px' }}>{smsDisponiveis} ainda não receberam nesta sessão</div>
+                      <button onClick={limparCampanhaSMS} style={{ background: 'none', border: 'none', color: '#555', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline', marginLeft: 'auto' }}>Limpar</button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Passo 2: Mensagem */}
+                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,107,0,0.15)', borderRadius: '12px', padding: '16px' }}>
+                  <div style={{ color: '#FF6B00', fontSize: '12px', fontWeight: 700, marginBottom: '10px' }}>2. Mensagem do disparo</div>
+                  <textarea placeholder="Digite a mensagem que será enviada para todos..." value={smsMensagemMassa} onChange={e => setSmsMensagemMassa(e.target.value)} rows={4}
+                    style={{ ...inp, resize: 'none', marginBottom: '6px' }} />
+                  <div style={{ textAlign: 'right', fontSize: '11px', color: smsMensagemMassa.length > 140 ? '#f38ba8' : 'rgba(255,255,255,0.2)' }}>{smsMensagemMassa.length}/160 caracteres</div>
+                </div>
+
+                {/* Passo 3: Quantidade */}
+                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,107,0,0.15)', borderRadius: '12px', padding: '16px' }}>
+                  <div style={{ color: '#FF6B00', fontSize: '12px', fontWeight: 700, marginBottom: '10px' }}>3. Quantidade de disparos nesta campanha</div>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <input type="number" min={1} max={Math.min(smsDisponiveis, limiteSMS - smsUsados) || 1} value={smsQuantidade}
+                      onChange={e => setSmsQuantidade(Math.max(1, parseInt(e.target.value) || 1))}
+                      style={{ width: '120px', padding: '10px 14px', background: 'rgba(255,107,0,0.05)', border: '1px solid rgba(255,107,0,0.4)', borderRadius: '8px', color: 'white', fontSize: '14px', outline: 'none', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700 }} />
+                    <span style={{ color: '#666', fontSize: '12px' }}>de {smsDisponiveis} contatos disponíveis</span>
+                    {smsDisponiveis > 0 && (
+                      <button onClick={() => setSmsQuantidade(Math.min(smsDisponiveis, limiteSMS - smsUsados))}
+                        style={{ background: 'none', border: '1px solid rgba(255,107,0,0.2)', color: '#888', padding: '8px 12px', borderRadius: '8px', fontSize: '11px', cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        Máximo disponível
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ color: '#444', fontSize: '11px', marginTop: '6px' }}>
+                    Limite do plano: {(limiteSMS - smsUsados).toLocaleString('pt-BR')} SMS restantes este mês
+                  </div>
+                </div>
+
+                {/* Botão disparar */}
+                <button onClick={executarDisparoSMS} disabled={smsDisparando || smsCSV.length === 0 || !smsMensagemMassa.trim()}
+                  style={{ background: smsDisparando ? '#333' : '#FF6B00', border: 'none', color: 'white', padding: '16px', borderRadius: '12px', fontSize: '15px', fontWeight: 700, cursor: (smsDisparando || smsCSV.length === 0 || !smsMensagemMassa.trim()) ? 'not-allowed' : 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", opacity: (smsCSV.length === 0 || !smsMensagemMassa.trim()) ? 0.4 : 1 }}>
+                  {smsDisparando ? `Disparando... ${smsProgressoAtual}/${smsProgressoTotal}` : `🚀 Disparar para ${Math.min(smsQuantidade, smsDisponiveis)} contatos`}
+                </button>
+
+                {/* Barra de progresso */}
+                {smsDisparando && (
+                  <div style={{ background: '#1a1a1a', borderRadius: '8px', height: '8px', overflow: 'hidden' }}>
+                    <div style={{ background: '#FF6B00', height: '100%', width: `${smsProgressoTotal > 0 ? (smsProgressoAtual / smsProgressoTotal) * 100 : 0}%`, transition: 'width 0.3s' }} />
+                  </div>
+                )}
+
+                {/* Resultados */}
+                {smsResultados.length > 0 && (
+                  <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,107,0,0.15)', borderRadius: '12px', padding: '16px' }}>
+                    <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                      <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', padding: '8px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, flex: 1, textAlign: 'center' }}>
+                        ✓ {smsEnviadosCampanha} enviados
+                      </div>
+                      {smsFailsCampanha > 0 && (
+                        <div style={{ background: 'rgba(243,139,168,0.1)', border: '1px solid rgba(243,139,168,0.3)', color: '#f38ba8', padding: '8px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, flex: 1, textAlign: 'center' }}>
+                          ✗ {smsFailsCampanha} falharam
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                      {smsResultados.map((r, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 4px', borderBottom: '1px solid rgba(255,107,0,0.05)', fontSize: '12px' }}>
+                          <span style={{ color: '#888' }}>{r.telefone}</span>
+                          <span style={{ color: r.sucesso ? '#22c55e' : '#f38ba8' }}>{r.sucesso ? '✓ Enviado' : '✗ ' + (r.erro || 'Falhou')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
+        {/* ABA CONTATOS */}
         {abaAtiva === 'contatos' && (
           <div style={{ background: 'rgba(255,107,0,0.03)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '28px' }}>
             <h2 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '24px' }}>Contatos</h2>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '10px', marginBottom: '20px' }}>
               <input placeholder="Nome" value={novoNome} onChange={e => setNovoNome(e.target.value)} style={inp} />
               <input placeholder="Telefone (+5511...)" value={novoTel} onChange={e => setNovoTel(e.target.value)} style={inp} />
-              <button className="btn-main" onClick={adicionarContato} disabled={adicionando} style={{ padding: '12px 20px', background: '#FF6B00', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 800, whiteSpace: 'nowrap', fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: '0 4px 16px rgba(255,107,0,0.25)' }}>
+              <button className="btn-main" onClick={adicionarContato} disabled={adicionando} style={{ padding: '12px 20px', background: '#FF6B00', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 800, whiteSpace: 'nowrap', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 {adicionando ? '...' : '+ Adicionar'}
               </button>
             </div>
@@ -480,6 +667,7 @@ export default function Home() {
           </div>
         )}
 
+        {/* ABA RAMAL */}
         {abaAtiva === 'ramal' && (
           <div style={{ background: 'rgba(255,107,0,0.03)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '28px' }}>
             <h2 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '8px' }}>Ramal Virtual</h2>
@@ -494,6 +682,7 @@ export default function Home() {
           </div>
         )}
 
+        {/* ABA WHATSAPP */}
         {abaAtiva === 'whatsapp' && (
           <div style={{ background: 'rgba(255,107,0,0.03)', border: '1px solid rgba(255,107,0,0.1)', borderRadius: '16px', padding: '28px' }}>
             <h2 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '16px' }}>💬 WhatsApp</h2>
@@ -532,7 +721,7 @@ export default function Home() {
             <input type="text" placeholder="Telefone (+5511999999999)" value={waTelefone} onChange={e => setWaTelefone(e.target.value)} style={{ ...inp, marginBottom: '12px' }} />
             <textarea placeholder="Digite a mensagem WhatsApp..." rows={4} value={waMensagem} onChange={e => setWaMensagem(e.target.value)} style={{ ...inp, marginBottom: '16px', resize: 'none' as const }} />
             {waStatus && <div style={{ background: waStatus.includes('✓') ? 'rgba(37,211,102,0.1)' : 'rgba(243,139,168,0.1)', border: `1px solid ${waStatus.includes('✓') ? 'rgba(37,211,102,0.25)' : 'rgba(243,139,168,0.25)'}`, borderRadius: '10px', padding: '10px 14px', color: waStatus.includes('✓') ? '#25d366' : '#f38ba8', fontSize: '13px', marginBottom: '16px' }}>{waStatus}</div>}
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '28px' }}>
+            <div style={{ display: 'flex', gap: '12px' }}>
               <button onClick={enviarWhatsApp} disabled={waEnviando} style={{ flex: 1, padding: '14px', background: waEnviando ? '#333' : '#25d366', color: 'white', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 800, cursor: waEnviando ? 'not-allowed' : 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 {waEnviando ? 'Enviando...' : '💬 Enviar WhatsApp'}
               </button>
@@ -540,29 +729,6 @@ export default function Home() {
                 {waEnviando ? 'Enviando...' : '🚀 Disparar para Todos'}
               </button>
             </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid rgba(255,107,0,0.08)' }}>
-                  {['Nome', 'Telefone', 'Status'].map(h => <th key={h} style={{ padding: '10px 12px', textAlign: 'left' as const, fontSize: '10px', color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase' as const, fontWeight: 700 }}>{h}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {contatos.length === 0 ? (
-                  <tr><td colSpan={3} style={{ padding: '40px', textAlign: 'center' as const, color: 'rgba(255,255,255,0.2)' }}>Nenhum contato</td></tr>
-                ) : contatos.map(c => {
-                  const sc = statusColors[c.status] || statusColors['Aguardando retorno']
-                  return (
-                    <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,107,0,0.05)' }}>
-                      <td style={{ padding: '12px', color: 'white', fontSize: '14px', fontWeight: 600 }}>{c.nome}</td>
-                      <td style={{ padding: '12px', color: 'rgba(255,255,255,0.35)', fontSize: '12px' }}>{c.telefone}</td>
-                      <td style={{ padding: '12px' }}>
-                        <span style={{ background: sc.bg, color: sc.color, padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 700 }}>{c.status || 'Aguardando retorno'}</span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
           </div>
         )}
       </div>

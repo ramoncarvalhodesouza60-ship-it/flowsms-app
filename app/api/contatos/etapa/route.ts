@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
         const { telefone, etapa } = await req.json()
 
         if (!telefone || !etapa) {
-            return NextResponse.json({ success: false, error: 'telefone e etapa são obrigatórios' }, { status: 400 })
+            return NextResponse.json({ success: false, error: 'telefone e etapa são obrigatorios' }, { status: 400 })
         }
 
         const telNorm = normalizarTelefone(telefone)
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
         // Busca o contato pelo telefone
         const records: any[] = []
         await new Promise<void>((resolve, reject) => {
-            base('Contato').select({ maxRecords: 5 }).eachPage(
+            base('Contato').select({ maxRecords: 500 }).eachPage(
                 (pageRecords: any[], fetchNextPage: () => void) => {
                     pageRecords.forEach((record: any) => {
                         const tel = record.get('Phone') || ''
@@ -35,12 +35,16 @@ export async function POST(req: NextRequest) {
         })
 
         if (records.length === 0) {
-            // Contato não cadastrado ainda — não tem problema, só não salva
-            return NextResponse.json({ success: false, error: 'Contato não encontrado no Airtable' })
+            // Contato nao existe ainda — cria com telefone e etapa
+            await base('Contato').create({
+                'Phone': telefone,
+                'etapa': etapa,
+            })
+            return NextResponse.json({ success: true, criado: true })
         }
 
-        // Atualiza a etapa do contato
-        await base('Contato').update(records[0].id, { etapa })
+        // Atualiza a etapa do contato existente
+        await base('Contato').update(records[0].id, { etapa: etapa })
 
         return NextResponse.json({ success: true })
     } catch (error: any) {

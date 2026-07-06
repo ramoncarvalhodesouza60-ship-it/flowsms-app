@@ -36,6 +36,7 @@ type MensagemAirtable = {
     empresa: string
     nomeContato?: string | null
     statusContato?: string | null
+    etapaContato?: string | null
 }
 
 type Contato = {
@@ -172,6 +173,8 @@ function WhatsAppConteudo() {
                 const ultima = ordenadas[ordenadas.length - 1]
                 const nomeReal = ordenadas.find(m => m.nomeContato)?.nomeContato
                 const statusReal = ordenadas.find(m => m.statusContato)?.statusContato
+                // Usa etapa do Airtable se disponível, senão usa estado local, senão 'novo'
+                const etapaAirtable = ordenadas.find(m => (m as any).etapaContato)?.etapaContato
                 novosContatos.push({
                     id: telefone,
                     nome: nomeReal || telefone,
@@ -181,7 +184,7 @@ function WhatsAppConteudo() {
                     horario: ultima ? formatarHora(ultima.horario) : '',
                     naoLidas: 0,
                     status: statusReal || 'offline',
-                    etapa: etapasPorTelefone[telefone] || 'novo',
+                    etapa: etapasPorTelefone[telefone] || etapaAirtable || 'novo',
                 })
             })
 
@@ -360,11 +363,23 @@ function WhatsAppConteudo() {
         }
     }
 
-    function moverParaColuna(telefone: string, novaEtapa: string) {
+    async function moverParaColuna(telefone: string, novaEtapa: string) {
+        // Atualiza estado local imediatamente (otimista)
         setEtapasPorTelefone(prev => ({ ...prev, [telefone]: novaEtapa }))
         setContatos(prev => prev.map(c => c.id === telefone ? { ...c, etapa: novaEtapa } : c))
         if (conversaSelecionada?.id === telefone) {
             setConversaSelecionada(prev => prev ? { ...prev, etapa: novaEtapa } : prev)
+        }
+
+        // Salva no Airtable
+        try {
+            await fetch('/api/contatos/etapa', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telefone, etapa: novaEtapa }),
+            })
+        } catch (e) {
+            console.error('Erro ao salvar etapa no Airtable:', e)
         }
     }
 

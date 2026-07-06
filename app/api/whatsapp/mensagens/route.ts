@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server'
 const Airtable = require('airtable')
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
 
-// Normaliza telefone para comparação (remove espaços, parênteses, hífens, "+" etc)
 function normalizarTelefone(tel: string) {
     return (tel || '').replace(/\D/g, '')
 }
@@ -24,7 +23,7 @@ export async function GET(request: NextRequest) {
                             id: record.id,
                             telefone: record.get('telefone'),
                             mensagem: record.get('mensagem'),
-                            tipo: record.get('tipo'), // 'enviada' ou 'recebida'
+                            tipo: record.get('tipo'),
                             horario: record.get('horario'),
                             empresa: record.get('empresa'),
                         })
@@ -35,7 +34,7 @@ export async function GET(request: NextRequest) {
             )
         })
 
-        // 2. Busca contatos para cruzar nome + status pelo telefone
+        // 2. Busca contatos para cruzar nome + status + etapa pelo telefone
         const contatos: any[] = []
         await new Promise<void>((resolve, reject) => {
             base('Contato').select({ maxRecords: 500 }).eachPage(
@@ -45,6 +44,7 @@ export async function GET(request: NextRequest) {
                             nome: record.get('Name'),
                             telefone: record.get('Phone'),
                             status: record.get('Status'),
+                            etapa: record.get('etapa') || null,
                             empresa: record.get('empresa'),
                         })
                     })
@@ -54,16 +54,25 @@ export async function GET(request: NextRequest) {
             )
         })
 
-        const mapaContatos = new Map<string, { nome: string; status: string }>()
+        const mapaContatos = new Map<string, { nome: string; status: string; etapa: string | null }>()
         contatos.forEach(c => {
             if (c.telefone) {
-                mapaContatos.set(normalizarTelefone(c.telefone), { nome: c.nome, status: c.status })
+                mapaContatos.set(normalizarTelefone(c.telefone), {
+                    nome: c.nome,
+                    status: c.status,
+                    etapa: c.etapa,
+                })
             }
         })
 
         const comNome = records.map(r => {
             const info = mapaContatos.get(normalizarTelefone(r.telefone))
-            return { ...r, nomeContato: info?.nome || null, statusContato: info?.status || null }
+            return {
+                ...r,
+                nomeContato: info?.nome || null,
+                statusContato: info?.status || null,
+                etapaContato: info?.etapa || null,
+            }
         })
 
         return NextResponse.json(comNome)
@@ -81,7 +90,7 @@ export async function POST(request: NextRequest) {
         const record = await base('Mensagens').create({
             'telefone': telefone,
             'mensagem': mensagem,
-            'tipo': tipo, // 'enviada' | 'recebida'
+            'tipo': tipo,
             'horario': new Date().toISOString(),
             'empresa': empresa || '',
         })

@@ -131,6 +131,8 @@ function WhatsAppConteudo() {
     const [languageCode, setLanguageCode] = useState('pt_BR')
     const [quantidadeDisparo, setQuantidadeDisparo] = useState(100)
     const [jaEnviadosSet, setJaEnviadosSet] = useState<Set<string>>(new Set())
+    const [historicoWA, setHistoricoWA] = useState<Set<string>>(new Set())
+    const [mostrarRepetidosWA, setMostrarRepetidosWA] = useState(false)
     const [disparando, setDisparando] = useState(false)
     const [progressoAtual, setProgressoAtual] = useState(0)
     const [progressoTotal, setProgressoTotal] = useState(0)
@@ -203,6 +205,20 @@ function WhatsAppConteudo() {
 
     useEffect(() => {
         carregarMensagens()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [empresaAtual])
+
+    useEffect(() => {
+        if (empresaAtual) {
+            fetch('/api/uso?empresa=' + encodeURIComponent(empresaAtual))
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success && data.whatsapp?.telefonesUsados) {
+                        setHistoricoWA(new Set(data.whatsapp.telefonesUsados))
+                    }
+                })
+                .catch(e => console.error('Erro ao carregar histórico WA:', e))
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [empresaAtual])
     useEffect(() => {
@@ -448,7 +464,7 @@ function WhatsAppConteudo() {
 
     // Filtra os contatos que ainda não receberam disparo nesta sessão, até a quantidade selecionada
     function obterContatosParaDisparo(): ContatoCSV[] {
-        const disponiveis = contatosCSV.filter(c => !jaEnviadosSet.has(c.telefone))
+        const disponiveis = contatosCSV.filter(c => !todosJaEnviadosWA.has(c.telefone))
         return disponiveis.slice(0, quantidadeDisparo)
     }
 
@@ -485,6 +501,11 @@ function WhatsAppConteudo() {
 
                 // Marca todos como enviados (sucesso ou falha) para não tentar de novo automaticamente
                 setJaEnviadosSet(prev => {
+                    const novo = new Set(prev)
+                    telefones.forEach(t => novo.add(t))
+                    return novo
+                })
+                setHistoricoWA(prev => {
                     const novo = new Set(prev)
                     telefones.forEach(t => novo.add(t))
                     return novo
@@ -560,7 +581,9 @@ function WhatsAppConteudo() {
         )
     }
 
-    const disponiveisParaDisparo = contatosCSV.filter(c => !jaEnviadosSet.has(c.telefone)).length
+    const todosJaEnviadosWA = new Set([...historicoWA, ...jaEnviadosSet])
+    const disponiveisParaDisparo = contatosCSV.filter(c => !todosJaEnviadosWA.has(c.telefone)).length
+    const repetidosWA = contatosCSV.filter(c => todosJaEnviadosWA.has(c.telefone))
     const enviadosNestaCampanha = resultadosDisparo.filter(r => r.sucesso).length
     const falhasNestaCampanha = resultadosDisparo.filter(r => !r.sucesso).length
 
@@ -624,16 +647,36 @@ function WhatsAppConteudo() {
                             <div style={{ color: '#444', fontSize: '11px', marginTop: '8px' }}>Formato esperado: Nome,Telefone (uma linha por contato). Se não tiver nome, só o telefone também funciona.</div>
 
                             {contatosCSV.length > 0 && (
-                                <div style={{ marginTop: '14px', display: 'flex', gap: '16px', alignItems: 'center' }}>
-                                    <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', padding: '8px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600 }}>
-                                        ✓ {contatosCSV.length} contatos carregados
+                                <div style={{ marginTop: '14px' }}>
+                                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '10px' }}>
+                                        <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', padding: '8px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600 }}>
+                                            ✓ {contatosCSV.length} total
+                                        </div>
+                                        <div style={{ background: 'rgba(116,199,236,0.1)', border: '1px solid rgba(116,199,236,0.3)', color: '#74c7ec', padding: '8px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600 }}>
+                                            🆕 {disponiveisParaDisparo} novos
+                                        </div>
+                                        {repetidosWA.length > 0 && (
+                                            <div style={{ background: 'rgba(255,107,0,0.1)', border: '1px solid rgba(255,107,0,0.3)', color: '#FF6B00', padding: '8px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                                                onClick={() => setMostrarRepetidosWA(!mostrarRepetidosWA)}>
+                                                ⚠️ {repetidosWA.length} já receberam {mostrarRepetidosWA ? '▲' : '▼'}
+                                            </div>
+                                        )}
+                                        <button onClick={limparCampanha} style={{ background: 'none', border: 'none', color: '#555', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline', marginLeft: 'auto' }}>
+                                            Limpar lista
+                                        </button>
                                     </div>
-                                    <div style={{ color: '#666', fontSize: '12px' }}>
-                                        {disponiveisParaDisparo} ainda não receberam disparo nesta sessão
-                                    </div>
-                                    <button onClick={limparCampanha} style={{ background: 'none', border: 'none', color: '#555', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline', marginLeft: 'auto' }}>
-                                        Limpar lista
-                                    </button>
+                                    {mostrarRepetidosWA && repetidosWA.length > 0 && (
+                                        <div style={{ background: 'rgba(255,107,0,0.05)', border: '1px solid rgba(255,107,0,0.2)', borderRadius: '8px', padding: '10px', maxHeight: '160px', overflowY: 'auto' }}>
+                                            <div style={{ color: '#FF6B00', fontSize: '11px', fontWeight: 700, marginBottom: '6px' }}>⚠️ Estes números já receberam disparo anteriormente:</div>
+                                            {repetidosWA.map((c, i) => (
+                                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid rgba(255,107,0,0.08)', fontSize: '11px' }}>
+                                                    <span style={{ color: '#888' }}>{c.nome !== c.telefone ? c.nome : ''}</span>
+                                                    <span style={{ color: '#FF6B00', fontFamily: 'monospace' }}>{c.telefone}</span>
+                                                </div>
+                                            ))}
+                                            <div style={{ color: '#666', fontSize: '10px', marginTop: '8px' }}>Você pode disparar mesmo assim se quiser.</div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

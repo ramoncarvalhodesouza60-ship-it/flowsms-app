@@ -25,6 +25,7 @@ const colunas = [
     { id: 'proposta', label: 'Proposta Enviada', cor: '#FF6B00', bg: 'rgba(255,107,0,0.08)', borda: 'rgba(255,107,0,0.2)' },
     { id: 'convertido', label: 'Convertido', cor: '#22c55e', bg: 'rgba(34,197,94,0.08)', borda: 'rgba(34,197,94,0.2)' },
     { id: 'perdido', label: 'Perdido', cor: '#f38ba8', bg: 'rgba(243,139,168,0.08)', borda: 'rgba(243,139,168,0.2)' },
+    { id: 'entregue', label: 'Entregue', cor: '#a78bfa', bg: 'rgba(167,139,250,0.08)', borda: 'rgba(167,139,250,0.2)' },
 ]
 
 type MensagemAirtable = {
@@ -1017,7 +1018,7 @@ function WhatsAppConteudo() {
                             <div key={col.id}
                                 onDragOver={e => e.preventDefault()}
                                 onDrop={() => { if (dragId !== null) { moverParaColuna(dragId, col.id); setDragId(null) } }}
-                                style={{ minWidth: '240px', maxWidth: '240px', background: col.bg, border: `1px solid ${col.borda}`, borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                style={{ minWidth: '300px', maxWidth: '300px', background: col.bg, border: `1px solid ${col.borda}`, borderRadius: '12px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                                     <span style={{ color: col.cor, fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{col.label}</span>
                                     <span style={{ background: col.borda, color: col.cor, borderRadius: '12px', padding: '2px 8px', fontSize: '11px', fontWeight: 700 }}>{cards.length}</span>
@@ -1060,3 +1061,26 @@ function WhatsAppConteudo() {
         </div>
     )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

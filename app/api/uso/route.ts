@@ -20,11 +20,15 @@ export async function GET(request: NextRequest) {
         const { inicio, fim } = limitesDoMesAtual()
 
         // Conta WhatsApp — mensagens do tipo 'enviada' no mês atual
+        // OBS: campo "horario" é Single line text no Airtable, não Date.
+        // Como o valor é ISO 8601 (ex: 2026-06-18T06:15:04.979Z), a comparação
+        // de texto (>=, <) funciona corretamente, ao contrário de IS_AFTER/IS_BEFORE
+        // que exigem um campo de Data de verdade.
         let totalWhatsApp = 0
         const telefonesUsados = new Set<string>()
 
         await new Promise<void>((resolve, reject) => {
-            const formula = 'AND({empresa} = "' + empresa + '", {tipo} = "enviada", IS_AFTER({horario}, "' + inicio + '"), IS_BEFORE({horario}, "' + fim + '"))'
+            const formula = 'AND({empresa} = "' + empresa + '", {tipo} = "enviada", {horario} >= "' + inicio + '", {horario} < "' + fim + '")'
             base('Mensagens').select({ filterByFormula: formula, maxRecords: 5000 }).eachPage(
                 (pageRecords: any[], fetchNextPage: () => void) => {
                     pageRecords.forEach((record: any) => {
@@ -43,7 +47,7 @@ export async function GET(request: NextRequest) {
         const telefonesSMSUsados = new Set<string>()
 
         await new Promise<void>((resolve, reject) => {
-            const formula = 'AND({empresa} = "' + empresa + '", {tipo} = "sms", IS_AFTER({horario}, "' + inicio + '"), IS_BEFORE({horario}, "' + fim + '"))'
+            const formula = 'AND({empresa} = "' + empresa + '", {tipo} = "sms", {horario} >= "' + inicio + '", {horario} < "' + fim + '")'
             base('Mensagens').select({ filterByFormula: formula, maxRecords: 5000 }).eachPage(
                 (pageRecords: any[], fetchNextPage: () => void) => {
                     pageRecords.forEach((record: any) => {

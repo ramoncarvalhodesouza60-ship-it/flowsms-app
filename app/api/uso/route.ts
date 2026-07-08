@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server'
 const Airtable = require('airtable')
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
 
-// Retorna o primeiro e último dia do mês atual em formato ISO
 function limitesDoMesAtual() {
     const agora = new Date()
     const inicio = new Date(agora.getFullYear(), agora.getMonth(), 1)
@@ -20,7 +19,7 @@ export async function GET(request: NextRequest) {
 
         const { inicio, fim } = limitesDoMesAtual()
 
-        // Conta mensagens do tipo 'enviada' para essa empresa dentro do mês atual
+        // Conta WhatsApp — mensagens do tipo 'enviada' no mês atual
         let totalWhatsApp = 0
         const telefonesUsados = new Set<string>()
 
@@ -39,8 +38,8 @@ export async function GET(request: NextRequest) {
             )
         })
 
-        // Conta SMS enviados pela tabela Mensagens (tipo 'sms') dentro do mês — captura avulsos e em massa
-        let totalSMS = 0
+        // Conta SMS novos — tipo 'sms' na tabela Mensagens (após nossa correção)
+        let totalSMSNovo = 0
         const telefonesSMSUsados = new Set<string>()
 
         await new Promise<void>((resolve, reject) => {
@@ -48,7 +47,7 @@ export async function GET(request: NextRequest) {
             base('Mensagens').select({ filterByFormula: formula, maxRecords: 5000 }).eachPage(
                 (pageRecords: any[], fetchNextPage: () => void) => {
                     pageRecords.forEach((record: any) => {
-                        totalSMS++
+                        totalSMSNovo++
                         const tel = record.get('telefone')
                         if (tel) telefonesSMSUsados.add(String(tel).replace(/\D/g, ''))
                     })
@@ -57,6 +56,27 @@ export async function GET(request: NextRequest) {
                 (err: any) => { if (err) reject(err); else resolve() }
             )
         })
+
+        // Conta SMS antigos — campo 'SMS Enviados' na tabela Contato (antes da correção)
+        let totalSMSAntigo = 0
+
+        await new Promise<void>((resolve, reject) => {
+            // Busca contatos com SMS marcado — sem filtro de empresa pois os antigos não tinham empresa
+            const formula = '{SMS Enviados} = TRUE()'
+            base('Contato').select({ filterByFormula: formula, maxRecords: 5000 }).eachPage(
+                (pageRecords: any[], fetchNextPage: () => void) => {
+                    pageRecords.forEach((record: any) => {
+                        totalSMSAntigo++
+                        const tel = record.get('Phone')
+                        if (tel) telefonesSMSUsados.add(String(tel).replace(/\D/g, ''))
+                    })
+                    fetchNextPage()
+                },
+                (err: any) => { if (err) reject(err); else resolve() }
+            )
+        })
+
+        const totalSMS = totalSMSNovo + totalSMSAntigo
 
         return NextResponse.json({
             success: true,
@@ -73,10 +93,3 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 }
-
-
-
-
-
-
-

@@ -12,26 +12,23 @@ export async function POST(request: Request) {
     const res = await fetch(url)
     const data = await res.json()
 
-    if (data[0]?.situacao === 'OK') {
-      if (contatoId) {
-        await base('Contato').update(contatoId, {
-          'SMS Enviados': true
-        })
-      }
-
-      // Registra o envio na tabela Mensagens para contagem real do limite mensal,
-      // cobrindo tanto envio avulso quanto em massa.
-      await base('Mensagens').create({
-        'telefone': telefone,
-        'mensagem': mensagem,
-        'tipo': 'sms',
-        'horario': new Date().toISOString(),
-        'empresa': empresa || '',
+    // DIAGNÓSTICO TEMPORÁRIO: sempre salva no Airtable, independente da situacao,
+    // e devolve a resposta crua da SMSDev pra vermos o que ela realmente retorna.
+    if (contatoId) {
+      await base('Contato').update(contatoId, {
+        'SMS Enviados': true
       })
-
-      return NextResponse.json({ success: true })
     }
-    return NextResponse.json({ success: true })
+
+    await base('Mensagens').create({
+      'telefone': telefone,
+      'mensagem': mensagem,
+      'tipo': 'sms',
+      'horario': new Date().toISOString(),
+      'empresa': empresa || '',
+    })
+
+    return NextResponse.json({ success: true, debug_smsdev_response: data })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

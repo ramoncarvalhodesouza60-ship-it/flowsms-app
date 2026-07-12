@@ -98,10 +98,7 @@ function GridLines() {
   )
 }
 
-const empresas: any[] = [
-  { email: 'admin@flowsms.com', senha: '123456', empresa: 'FlowSMS Admin', whatsapp: true, ramal: true, ramalNumero: '+1 252 690 3012', limiteSMS: 999999, limiteWhatsApp: 999999 },
-  { email: 'nycollas@empresa.com', senha: 'nycollas123', empresa: 'Empresa Nycollas', whatsapp: true, ramal: false, ramalNumero: null, limiteSMS: 20000, limiteWhatsApp: 0 },
-]
+
 
 const statusColors: Record<string, { bg: string; color: string; dot: string }> = {
   'Aguardando retorno': { bg: 'rgba(249,226,175,0.12)', color: '#f9e2af', dot: '#f9e2af' },
@@ -259,14 +256,22 @@ export default function Home() {
 
   async function entrar() {
     setLoading(true)
-    await new Promise(r => setTimeout(r, 600))
-    const encontrada = empresas.find(e => e.email === email && e.senha === senha)
-    if (encontrada) {
-      setEmpresaAtual(encontrada.empresa)
-      setConfigEmpresa(encontrada)
-      setLogado(true)
-    } else {
-      setErro('Email ou senha incorretos')
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, senha }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setEmpresaAtual(data.cliente.empresa)
+        setConfigEmpresa(data.cliente)
+        setLogado(true)
+      } else {
+        setErro(data.error || 'Email ou senha incorretos')
+      }
+    } catch (e) {
+      setErro('Erro ao conectar. Tente novamente.')
     }
     setLoading(false)
   }

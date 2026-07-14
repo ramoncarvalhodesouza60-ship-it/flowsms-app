@@ -46,6 +46,8 @@ Responda APENAS o JSON, nada mais.`
         } catch {
             resultado = { pedido_confirmado: false }
         }
+        console.log('RESULTADO DETECÇÃO DE PEDIDO:', JSON.stringify(resultado))
+        console.log('TEXTO BRUTO DA IA:', textoResposta)
 
         return NextResponse.json(resultado)
     } catch (error: any) {

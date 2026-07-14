@@ -43,6 +43,8 @@ export async function POST(req: NextRequest) {
             let empresa = 'FlowSMS Admin'
             let clienteToken: string | null = null
             let clientePhoneNumberId: string | null = null
+            let clienteEmail: string | null = null
+            let clienteTelefoneAdmin: string | null = null
 
             if (phoneNumberId) {
                 const clientesUrl = 'https://api.airtable.com/v0/' + baseId + '/' + clientesId
@@ -59,6 +61,8 @@ export async function POST(req: NextRequest) {
                     empresa = cliente.empresa || 'FlowSMS Admin'
                     clienteToken = cliente.whatsapp_token || null
                     clientePhoneNumberId = cliente.phone_number_id || null
+                    clienteEmail = cliente.email || null
+                    clienteTelefoneAdmin = cliente.telefone_admin || null
                 }
             }
 
@@ -115,6 +119,35 @@ export async function POST(req: NextRequest) {
                             }
                         })
                     })
+
+                    // 6. Detecta se o cliente confirmou um pedido nessa troca de mensagens
+                    try {
+                        const detectarRes = await fetch(baseUrl + '/api/pedidos/detectar', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ mensagemCliente: texto, respostaIA: resposta })
+                        })
+                        const detectarData = await detectarRes.json()
+
+                        // 7. Se detectou pedido confirmado, salva e notifica o cliente dono da conversa
+                        if (detectarData?.pedido_confirmado) {
+                            await fetch(baseUrl + '/api/pedidos/notificar', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    telefone,
+                                    produto: detectarData.produto,
+                                    valor: detectarData.valor,
+                                    forma_pagamento: detectarData.forma_pagamento,
+                                    empresa,
+                                    emailCliente: clienteEmail,
+                                    telefoneAdminCliente: clienteTelefoneAdmin,
+                                })
+                            })
+                        }
+                    } catch (e) {
+                        console.error('Erro ao detectar/notificar pedido:', e)
+                    }
                 }
             }
         }

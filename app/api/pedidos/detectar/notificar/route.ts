@@ -5,13 +5,15 @@ export async function POST(request: Request) {
         const { telefone, produto, valor, forma_pagamento, empresa, emailCliente, telefoneAdminCliente } =
             await request.json()
 
+        console.log('NOTIFICAR - dados recebidos:', JSON.stringify({ telefone, produto, valor, forma_pagamento, empresa, emailCliente, telefoneAdminCliente }))
+
         const baseId = process.env.AIRTABLE_BASE_ID
         const apiKey = process.env.AIRTABLE_API_KEY
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://flowsms.com.br'
 
         // 1. Salva o pedido no Airtable, com status "Pendente" (aguardando confirmação manual do cliente)
         const pedidosUrl = 'https://api.airtable.com/v0/' + baseId + '/Pedidos'
-        await fetch(pedidosUrl, {
+        const airtableRes = await fetch(pedidosUrl, {
             method: 'POST',
             headers: {
                 Authorization: 'Bearer ' + apiKey,
@@ -29,6 +31,8 @@ export async function POST(request: Request) {
                 },
             }),
         })
+        const airtableData = await airtableRes.json()
+        console.log('NOTIFICAR - resposta Airtable:', airtableRes.status, JSON.stringify(airtableData))
 
         const mensagemNotificacao =
             '🔔 Novo pedido detectado!\n\n' +
@@ -41,7 +45,7 @@ export async function POST(request: Request) {
         // 2. Notifica via WhatsApp, no número pessoal do cliente dono desse pedido (se ele tiver cadastrado)
         if (telefoneAdminCliente) {
             try {
-                await fetch(baseUrl + '/api/whatsapp/send', {
+                const waRes = await fetch(baseUrl + '/api/whatsapp/send', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -51,15 +55,19 @@ export async function POST(request: Request) {
                         phoneNumberId: process.env.WHATSAPP_PHONE_ID,
                     }),
                 })
+                const waData = await waRes.json()
+                console.log('NOTIFICAR - resposta WhatsApp:', waRes.status, JSON.stringify(waData))
             } catch (e) {
-                console.error('Erro ao enviar notificação WhatsApp:', e)
+                console.error('NOTIFICAR - Erro ao enviar WhatsApp:', e)
             }
+        } else {
+            console.log('NOTIFICAR - telefoneAdminCliente vazio, WhatsApp não enviado')
         }
 
         // 3. Notifica via e-mail, no e-mail do cliente dono desse pedido (se ele tiver cadastrado)
         if (emailCliente) {
             try {
-                await fetch('https://api.resend.com/emails', {
+                const emailRes = await fetch('https://api.resend.com/emails', {
                     method: 'POST',
                     headers: {
                         Authorization: 'Bearer ' + process.env.RESEND_API_KEY,
@@ -78,14 +86,18 @@ export async function POST(request: Request) {
                             '<p>Acesse o painel do FlowSMS pra confirmar ou recusar este pedido.</p>',
                     }),
                 })
+                const emailData = await emailRes.json()
+                console.log('NOTIFICAR - resposta Resend:', emailRes.status, JSON.stringify(emailData))
             } catch (e) {
-                console.error('Erro ao enviar notificação e-mail:', e)
+                console.error('NOTIFICAR - Erro ao enviar e-mail:', e)
             }
+        } else {
+            console.log('NOTIFICAR - emailCliente vazio, e-mail não enviado')
         }
 
         return NextResponse.json({ success: true })
     } catch (error: any) {
-        console.error('Erro ao notificar pedido:', error)
+        console.error('NOTIFICAR - Erro geral:', error)
         return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 }

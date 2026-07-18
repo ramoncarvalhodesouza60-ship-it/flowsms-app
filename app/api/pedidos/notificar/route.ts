@@ -29,6 +29,7 @@ export async function POST(request: Request) {
                     data: new Date().toISOString(),
                     status: 'Pendente',
                 },
+                typecast: true,
             }),
         })
         const airtableData = await airtableRes.json()

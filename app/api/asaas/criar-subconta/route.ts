@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 
+// Rota temporária/manual — usada só pra criar a PRIMEIRA subconta de teste
+// na Asaas, exigida no "período de avaliação" antes de liberar o BaaS/White Label.
+// Depois que a subconta de teste for criada com sucesso, essa rota já cumpriu
+// seu papel — a criação de subcontas reais dos clientes vira parte do item 3
+// (tela de Pagamentos), com outro endpoint parecido com esse.
+
 export async function POST(request: Request) {
     try {
         const body = await request.json();
@@ -8,11 +14,13 @@ export async function POST(request: Request) {
             name,
             email,
             cpfCnpj,
+            companyType, // MEI, LIMITED, INDIVIDUAL, ASSOCIATION
+            birthDate, // obrigatório quando cpfCnpj é CPF (pessoa física)
             mobilePhone,
             incomeValue,
             address,
             addressNumber,
-            province,
+            province, // bairro
             postalCode,
         } = body;
 
@@ -33,6 +41,8 @@ export async function POST(request: Request) {
                 name,
                 email,
                 cpfCnpj,
+                companyType,
+                birthDate,
                 mobilePhone,
                 incomeValue: incomeValue || 3000,
                 address,

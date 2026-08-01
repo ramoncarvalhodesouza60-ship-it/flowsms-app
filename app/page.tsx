@@ -659,6 +659,17 @@ export default function Home() {
               <span style={{ fontSize: '15px' }}>{aba.icon}</span> {aba.label}
             </button>
           ))}
+          <a href="/asaas" style={{
+            display: 'flex', alignItems: 'center', gap: '10px',
+            padding: '12px 14px', borderRadius: '10px',
+            fontSize: '13px', fontWeight: 600, textAlign: 'left', width: '100%',
+            background: 'transparent',
+            color: 'rgba(255,255,255,0.4)',
+            fontFamily: 'Inter, sans-serif', transition: 'all .2s',
+            textDecoration: 'none', boxSizing: 'border-box',
+          }} className="side-btn">
+            <span style={{ fontSize: '15px' }}>💳</span> Criar Subconta
+          </a>
 
           <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', marginBottom: '10px' }}>

@@ -605,7 +605,13 @@ export default function Home() {
             ) : 'Entrar no Sistema →'}
           </button>
 
-          <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.15)', fontSize: '11px', marginTop: '20px' }}>
+          <p style={{ textAlign: 'center', marginTop: '20px' }}>
+            <a href="/cliente/login" style={{ color: '#FF6B00', fontSize: '12px', textDecoration: 'none', fontWeight: 600 }}>
+              É cliente? Entre por aqui →
+            </a>
+          </p>
+
+          <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.15)', fontSize: '11px', marginTop: '12px' }}>
             flowsms.com.br · Plataforma Segura
           </p>
         </div>

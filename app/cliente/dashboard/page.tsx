@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import BotaoSair from './BotaoSair'
+import MeusContatos from './MeusContatos'
 
 const cardPlaceholder: React.CSSProperties = {
     background: 'rgba(255,255,255,0.02)',
@@ -61,6 +62,8 @@ export default async function DashboardCliente() {
                     </div>
 
                 </div>
+
+                <MeusContatos />
             </div>
         </main>
     )

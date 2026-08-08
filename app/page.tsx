@@ -289,6 +289,14 @@ export default function Home() {
   const [templatesErro, setTemplatesErro] = useState('')
   const [templatesCarregou, setTemplatesCarregou] = useState(false)
 
+  // Estados da aba Catálogo
+  const [produtosLista, setProdutosLista] = useState<any[]>([])
+  const [produtosCarregando, setProdutosCarregando] = useState(false)
+  const [produtoNome, setProdutoNome] = useState('')
+  const [produtoVariacao, setProdutoVariacao] = useState('')
+  const [produtoPreco, setProdutoPreco] = useState('')
+  const [produtoEstoque, setProdutoEstoque] = useState('')
+  const [produtoSalvando, setProdutoSalvando] = useState(false)
   async function entrar() {
     setLoading(true)
     try {
@@ -460,6 +468,41 @@ export default function Home() {
     } catch { setIaRespostaTeste('Erro ao testar. Tente novamente.') }
     setIaTestando(false)
   }
+  async function carregarProdutos() {
+    setProdutosCarregando(true)
+    try {
+      const res = await fetch('/api/produtos?empresa=' + encodeURIComponent(empresaAtual))
+      const data = await res.json()
+      if (data.success) setProdutosLista(data.produtos)
+    } catch (e) { console.error(e) }
+    setProdutosCarregando(false)
+  }
+
+  async function criarProduto() {
+    if (!produtoNome.trim()) return
+    setProdutoSalvando(true)
+    try {
+      await fetch('/api/produtos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: produtoNome,
+          variacao: produtoVariacao,
+          preco: produtoPreco,
+          estoque: produtoEstoque,
+          empresa: empresaAtual,
+        }),
+      })
+      setProdutoNome(''); setProdutoVariacao(''); setProdutoPreco(''); setProdutoEstoque('')
+      carregarProdutos()
+    } catch (e) { console.error(e) }
+    setProdutoSalvando(false)
+  }
+
+  async function deletarProduto(id: string) {
+    await fetch('/api/produtos', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+    carregarProdutos()
+  }
 
   async function carregarTemplates() {
     if (!configEmpresa?.whatsapp_business_account_id || !configEmpresa?.whatsapp_token) {
@@ -507,6 +550,7 @@ export default function Home() {
   const abas = [
     { id: 'sms', icon: '📨', label: 'Disparar SMS' },
     { id: 'contatos', icon: '👥', label: 'Contatos' },
+    { id: 'catalogo', icon: '🛒', label: 'Catálogo' },
     { id: 'ia', icon: '🤖', label: 'IA / Assistente' },
     { id: 'templates', icon: '📄', label: 'Templates' },
     ...(configEmpresa?.ramal ? [{ id: 'ramal', icon: '📞', label: 'Ramal' }] : []),
@@ -517,6 +561,7 @@ export default function Home() {
     setAbaAtiva(id)
     setSidebarOpen(false)
     if (id === 'templates' && !templatesCarregou) carregarTemplates()
+    if (id === 'catalogo' && produtosLista.length === 0) carregarProdutos()
   }
 
   // ==================== LOGIN ====================
@@ -989,6 +1034,54 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
+                )}
+              </div>
+            )}
+            {/* ABA CATÁLOGO */}
+            {abaAtiva === 'catalogo' && (
+              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '20px', padding: '28px' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: 800, marginBottom: '6px' }}>🛒 Catálogo de Produtos</h2>
+                <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '13px', marginBottom: '24px' }}>
+                  Cadastre seus produtos para a IA consultar preço e estoque durante as conversas.
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px 120px auto', gap: '10px', marginBottom: '20px' }}>
+                  <input className="inp-focus" placeholder="Nome do produto" value={produtoNome} onChange={e => setProdutoNome(e.target.value)} style={inp} />
+                  <input className="inp-focus" placeholder="Variação (ex: 5kg, Azul)" value={produtoVariacao} onChange={e => setProdutoVariacao(e.target.value)} style={inp} />
+                  <input className="inp-focus" type="number" placeholder="Preço" value={produtoPreco} onChange={e => setProdutoPreco(e.target.value)} style={inp} />
+                  <input className="inp-focus" type="number" placeholder="Estoque" value={produtoEstoque} onChange={e => setProdutoEstoque(e.target.value)} style={inp} />
+                  <button onClick={criarProduto} disabled={produtoSalvando} style={{ padding: '12px 20px', background: 'linear-gradient(135deg,#FF6B00,#ff8c33)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap', fontFamily: 'Inter, sans-serif', boxShadow: '0 4px 12px rgba(255,107,0,0.3)' }}>
+                    {produtoSalvando ? '...' : '+ Adicionar'}
+                  </button>
+                </div>
+
+                {produtosCarregando && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px', padding: '20px', textAlign: 'center' }}>Carregando...</div>}
+
+                {!produtosCarregando && produtosLista.length === 0 && (
+                  <div style={{ padding: '40px', textAlign: 'center', color: 'rgba(255,255,255,0.15)', fontSize: '14px' }}>Nenhum produto cadastrado ainda</div>
+                )}
+
+                {!produtosCarregando && produtosLista.length > 0 && (
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                        {['Nome', 'Variação', 'Preço', 'Estoque', ''].map(h => <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>{h}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {produtosLista.map((p: any) => (
+                        <tr key={p.id} className="row-hover" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                          <td style={{ padding: '13px 12px', color: 'white', fontSize: '14px', fontWeight: 600 }}>{p.nome}</td>
+                          <td style={{ padding: '13px 12px', color: 'rgba(255,255,255,0.3)', fontSize: '12px' }}>{p.variacao}</td>
+                          <td style={{ padding: '13px 12px', color: '#FF6B00', fontSize: '13px', fontWeight: 700 }}>R$ {Number(p.preco).toFixed(2)}</td>
+                          <td style={{ padding: '13px 12px', color: p.estoque > 0 ? 'rgba(255,255,255,0.5)' : '#f38ba8', fontSize: '13px' }}>{p.estoque}</td>
+                          <td style={{ padding: '13px 12px', textAlign: 'right' }}>
+                            <button className="del-btn" onClick={() => deletarProduto(p.id)} style={{ background: 'transparent', color: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.06)', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontFamily: 'Inter, sans-serif' }}>Deletar</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 )}
               </div>
             )}

@@ -297,6 +297,7 @@ export default function Home() {
   const [produtoPreco, setProdutoPreco] = useState('')
   const [produtoEstoque, setProdutoEstoque] = useState('')
   const [produtoSalvando, setProdutoSalvando] = useState(false)
+  const [produtoErro, setProdutoErro] = useState('')
   async function entrar() {
     setLoading(true)
     try {
@@ -481,8 +482,9 @@ export default function Home() {
   async function criarProduto() {
     if (!produtoNome.trim()) return
     setProdutoSalvando(true)
+    setProdutoErro('')
     try {
-      await fetch('/api/produtos', {
+      const res = await fetch('/api/produtos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -493,9 +495,16 @@ export default function Home() {
           empresa: empresaAtual,
         }),
       })
-      setProdutoNome(''); setProdutoVariacao(''); setProdutoPreco(''); setProdutoEstoque('')
-      carregarProdutos()
-    } catch (e) { console.error(e) }
+      const data = await res.json()
+      if (data.success) {
+        setProdutoNome(''); setProdutoVariacao(''); setProdutoPreco(''); setProdutoEstoque('')
+        carregarProdutos()
+      } else {
+        setProdutoErro(data.error || 'Erro ao salvar produto')
+      }
+    } catch (e: any) {
+      setProdutoErro('Erro de conexão: ' + e.message)
+    }
     setProdutoSalvando(false)
   }
 
@@ -1054,6 +1063,12 @@ export default function Home() {
                     {produtoSalvando ? '...' : '+ Adicionar'}
                   </button>
                 </div>
+
+                {produtoErro && (
+                  <div style={{ background: 'rgba(243,139,168,0.08)', border: '1px solid rgba(243,139,168,0.2)', color: '#f38ba8', padding: '10px 14px', borderRadius: '10px', fontSize: '13px', marginBottom: '16px' }}>
+                    ⚠️ {produtoErro}
+                  </div>
+                )}
 
                 {produtosCarregando && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px', padding: '20px', textAlign: 'center' }}>Carregando...</div>}
 

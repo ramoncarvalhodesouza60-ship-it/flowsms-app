@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
                 const iaRes = await fetch(baseUrl + '/api/whatsapp/ia', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mensagem: texto, systemPrompt })
+                    body: JSON.stringify({ mensagem: texto, systemPrompt, empresa })
                 })
 
                 const iaData = await iaRes.json()

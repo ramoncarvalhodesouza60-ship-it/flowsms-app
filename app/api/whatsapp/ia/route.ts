@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { verificarRateLimit, obterIP } from '@/lib/rateLimit'
 
 const Airtable = require('airtable')
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
@@ -40,6 +41,16 @@ const ferramentas = [
 // Gera a resposta da IA para uma mensagem real recebida no WhatsApp (chamada pelo webhook)
 export async function POST(request: Request) {
     try {
+        const ip = obterIP(request)
+        // Limite mais generoso que o login, pois o webhook da Meta também pode chamar rapidamente
+        // em conversas ativas — mas ainda protege contra spam/abuso anormal.
+        const rate = verificarRateLimit(ip, 'whatsapp-ia', 30, 60 * 1000) // 30 chamadas por minuto por IP
+
+        if (!rate.permitido) {
+            console.error('WHATSAPP/IA - rate limit atingido para IP:', ip)
+            return NextResponse.json({ success: false, error: 'Limite de requisições atingido' }, { status: 429 })
+        }
+
         const { mensagem, systemPrompt, empresa } = await request.json()
 
         if (!mensagem) {

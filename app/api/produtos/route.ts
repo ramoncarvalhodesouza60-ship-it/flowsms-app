@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
                             variacao: record.get('variacao'),
                             preco: record.get('preco'),
                             estoque: record.get('estoque'),
+                            foto: record.get('foto') || null,
                             empresa: record.get('empresa'),
                         })
                     })
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const { nome, variacao, preco, estoque, empresa } = await request.json()
+        const { nome, variacao, preco, estoque, foto, empresa } = await request.json()
 
         if (!nome || !empresa) {
             return NextResponse.json({ success: false, error: 'Nome e empresa são obrigatórios' }, { status: 400 })
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
             'variacao': variacao || '',
             'preco': Number(preco) || 0,
             'estoque': Number(estoque) || 0,
+            'foto': foto || '',
             'empresa': empresa,
         })
         return NextResponse.json({ success: true, id: record.id })
@@ -56,7 +58,7 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
     try {
-        const { id, nome, variacao, preco, estoque } = await request.json()
+        const { id, nome, variacao, preco, estoque, foto } = await request.json()
         if (!id) {
             return NextResponse.json({ success: false, error: 'id é obrigatório' }, { status: 400 })
         }
@@ -66,6 +68,7 @@ export async function PATCH(request: NextRequest) {
         if (variacao !== undefined) campos['variacao'] = variacao
         if (preco !== undefined) campos['preco'] = Number(preco)
         if (estoque !== undefined) campos['estoque'] = Number(estoque)
+        if (foto !== undefined) campos['foto'] = foto
 
         const result = await base('Produtos').update(id, campos)
         return NextResponse.json({ success: true, id: result.id })

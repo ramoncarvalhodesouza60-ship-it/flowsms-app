@@ -298,6 +298,9 @@ export default function Home() {
   const [produtoEstoque, setProdutoEstoque] = useState('')
   const [produtoSalvando, setProdutoSalvando] = useState(false)
   const [produtoErro, setProdutoErro] = useState('')
+  const [produtoFoto, setProdutoFoto] = useState('')
+  const [produtoFotoEnviando, setProdutoFotoEnviando] = useState(false)
+  const [produtoEditandoId, setProdutoEditandoId] = useState<string | null>(null)
   async function entrar() {
     setLoading(true)
     try {
@@ -479,6 +482,23 @@ export default function Home() {
     setProdutosCarregando(false)
   }
 
+  async function enviarFotoProduto(arquivo: File) {
+    setProdutoFotoEnviando(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', arquivo)
+      const res = await fetch('/api/whatsapp/upload', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (data.success) {
+        setProdutoFoto(data.url)
+      } else {
+        setProdutoErro('Erro ao enviar foto: ' + (data.error || 'desconhecido'))
+      }
+    } catch (e: any) {
+      setProdutoErro('Erro ao enviar foto: ' + e.message)
+    }
+    setProdutoFotoEnviando(false)
+  }
   async function criarProduto() {
     if (!produtoNome.trim()) return
     setProdutoSalvando(true)
@@ -492,12 +512,13 @@ export default function Home() {
           variacao: produtoVariacao,
           preco: produtoPreco,
           estoque: produtoEstoque,
+          foto: produtoFoto,
           empresa: empresaAtual,
         }),
       })
       const data = await res.json()
       if (data.success) {
-        setProdutoNome(''); setProdutoVariacao(''); setProdutoPreco(''); setProdutoEstoque('')
+        setProdutoNome(''); setProdutoVariacao(''); setProdutoPreco(''); setProdutoEstoque(''); setProdutoFoto('')
         carregarProdutos()
       } else {
         setProdutoErro(data.error || 'Erro ao salvar produto')
@@ -506,6 +527,50 @@ export default function Home() {
       setProdutoErro('Erro de conexão: ' + e.message)
     }
     setProdutoSalvando(false)
+  }
+
+  async function salvarEdicaoProduto() {
+    if (!produtoNome.trim() || !produtoEditandoId) return
+    setProdutoSalvando(true)
+    setProdutoErro('')
+    try {
+      const res = await fetch('/api/produtos', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: produtoEditandoId,
+          nome: produtoNome,
+          variacao: produtoVariacao,
+          preco: produtoPreco,
+          estoque: produtoEstoque,
+          foto: produtoFoto,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setProdutoNome(''); setProdutoVariacao(''); setProdutoPreco(''); setProdutoEstoque(''); setProdutoFoto(''); setProdutoEditandoId(null)
+        carregarProdutos()
+      } else {
+        setProdutoErro(data.error || 'Erro ao salvar edição')
+      }
+    } catch (e: any) {
+      setProdutoErro('Erro de conexão: ' + e.message)
+    }
+    setProdutoSalvando(false)
+  }
+
+  function iniciarEdicaoProduto(p: any) {
+    setProdutoEditandoId(p.id)
+    setProdutoNome(p.nome || '')
+    setProdutoVariacao(p.variacao || '')
+    setProdutoPreco(String(p.preco || ''))
+    setProdutoEstoque(String(p.estoque || ''))
+    setProdutoFoto(p.foto || '')
+  }
+
+  function cancelarEdicaoProduto() {
+    setProdutoEditandoId(null)
+    setProdutoNome(''); setProdutoVariacao(''); setProdutoPreco(''); setProdutoEstoque(''); setProdutoFoto('')
   }
 
   async function deletarProduto(id: string) {
@@ -1054,14 +1119,42 @@ export default function Home() {
                   Cadastre seus produtos para a IA consultar preço e estoque durante as conversas.
                 </p>
 
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '14px' }}>
+                  <div style={{ width: '70px', height: '70px', borderRadius: '12px', overflow: 'hidden', background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {produtoFotoEnviando ? (
+                      <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>...</span>
+                    ) : produtoFoto ? (
+                      <img src={produtoFoto} alt="Foto do produto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <span style={{ fontSize: '22px', opacity: 0.2 }}>📷</span>
+                    )}
+                  </div>
+                  <div>
+                    <label style={{ display: 'inline-block', padding: '9px 16px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', color: 'rgba(255,255,255,0.6)', fontFamily: 'Inter, sans-serif' }}>
+                      {produtoFoto ? 'Trocar foto' : 'Adicionar foto (opcional)'}
+                      <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) enviarFotoProduto(f) }} />
+                    </label>
+                    {produtoFoto && (
+                      <button onClick={() => setProdutoFoto('')} style={{ marginLeft: '8px', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', fontSize: '12px', fontFamily: 'Inter, sans-serif' }}>
+                        remover
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px 120px auto', gap: '10px', marginBottom: '20px' }}>
                   <input className="inp-focus" placeholder="Nome do produto" value={produtoNome} onChange={e => setProdutoNome(e.target.value)} style={inp} />
                   <input className="inp-focus" placeholder="Variação (ex: 5kg, Azul)" value={produtoVariacao} onChange={e => setProdutoVariacao(e.target.value)} style={inp} />
                   <input className="inp-focus" type="number" placeholder="Preço" value={produtoPreco} onChange={e => setProdutoPreco(e.target.value)} style={inp} />
                   <input className="inp-focus" type="number" placeholder="Estoque" value={produtoEstoque} onChange={e => setProdutoEstoque(e.target.value)} style={inp} />
-                  <button onClick={criarProduto} disabled={produtoSalvando} style={{ padding: '12px 20px', background: 'linear-gradient(135deg,#FF6B00,#ff8c33)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap', fontFamily: 'Inter, sans-serif', boxShadow: '0 4px 12px rgba(255,107,0,0.3)' }}>
-                    {produtoSalvando ? '...' : '+ Adicionar'}
+                  <button onClick={produtoEditandoId ? salvarEdicaoProduto : criarProduto} disabled={produtoSalvando} style={{ padding: '12px 20px', background: 'linear-gradient(135deg,#FF6B00,#ff8c33)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap', fontFamily: 'Inter, sans-serif', boxShadow: '0 4px 12px rgba(255,107,0,0.3)' }}>
+                    {produtoSalvando ? '...' : produtoEditandoId ? 'Salvar edição' : '+ Adicionar'}
                   </button>
+                  {produtoEditandoId && (
+                    <button onClick={cancelarEdicaoProduto} style={{ padding: '12px 16px', background: 'transparent', color: 'rgba(255,255,255,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', cursor: 'pointer', fontSize: '13px', fontFamily: 'Inter, sans-serif' }}>
+                      Cancelar
+                    </button>
+                  )}
                 </div>
 
                 {produtoErro && (
@@ -1080,17 +1173,25 @@ export default function Home() {
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                        {['Nome', 'Variação', 'Preço', 'Estoque', ''].map(h => <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>{h}</th>)}
+                        {['', 'Nome', 'Variação', 'Preço', 'Estoque', ''].map((h, i) => <th key={i} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '10px', color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>{h}</th>)}
                       </tr>
                     </thead>
                     <tbody>
                       {produtosLista.map((p: any) => (
                         <tr key={p.id} className="row-hover" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                          <td style={{ padding: '8px 12px' }}>
+                            {p.foto ? (
+                              <img src={p.foto} alt={p.nome} style={{ width: '38px', height: '38px', borderRadius: '8px', objectFit: 'cover' }} />
+                            ) : (
+                              <div style={{ width: '38px', height: '38px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', opacity: 0.15 }}>📷</div>
+                            )}
+                          </td>
                           <td style={{ padding: '13px 12px', color: 'white', fontSize: '14px', fontWeight: 600 }}>{p.nome}</td>
                           <td style={{ padding: '13px 12px', color: 'rgba(255,255,255,0.3)', fontSize: '12px' }}>{p.variacao}</td>
                           <td style={{ padding: '13px 12px', color: '#FF6B00', fontSize: '13px', fontWeight: 700 }}>R$ {Number(p.preco).toFixed(2)}</td>
                           <td style={{ padding: '13px 12px', color: p.estoque > 0 ? 'rgba(255,255,255,0.5)' : '#f38ba8', fontSize: '13px' }}>{p.estoque}</td>
                           <td style={{ padding: '13px 12px', textAlign: 'right' }}>
+                            <button onClick={() => iniciarEdicaoProduto(p)} style={{ background: 'transparent', color: 'rgba(255,255,255,0.3)', border: '1px solid rgba(255,255,255,0.08)', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontFamily: 'Inter, sans-serif', marginRight: '6px' }}>Editar</button>
                             <button className="del-btn" onClick={() => deletarProduto(p.id)} style={{ background: 'transparent', color: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.06)', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontFamily: 'Inter, sans-serif' }}>Deletar</button>
                           </td>
                         </tr>

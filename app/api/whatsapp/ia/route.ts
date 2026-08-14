@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { verificarRateLimit, obterIP } from '@/lib/rateLimit'
+export const maxDuration = 60
 
 const Airtable = require('airtable')
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)

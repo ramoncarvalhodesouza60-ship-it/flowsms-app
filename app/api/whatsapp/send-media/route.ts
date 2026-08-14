@@ -7,8 +7,14 @@ export async function POST(req: NextRequest) {
     const tipo = body.tipo // 'audio' | 'image' | 'video' | 'document'
     const nomeArquivo = body.nomeArquivo // usado so para 'document'
 
-    const token = process.env.WHATSAPP_TOKEN
-    const phoneId = process.env.WHATSAPP_PHONE_ID
+    // Aceita token/phoneId por cliente (multi-tenant), com fallback pras
+    // variaveis de ambiente (conta admin) se nao vier nada no corpo.
+    const token = body.token || process.env.WHATSAPP_TOKEN
+    const phoneId = body.phoneNumberId || process.env.WHATSAPP_PHONE_ID
+
+    if (!token || !phoneId) {
+        return NextResponse.json({ success: false, error: 'Token ou phoneNumberId não configurado para este cliente' })
+    }
 
     try {
         // PASSO 1: baixar o arquivo do Vercel Blob

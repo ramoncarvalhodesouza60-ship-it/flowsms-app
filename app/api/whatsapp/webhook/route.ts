@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
 
                 const iaData = await iaRes.json()
                 const resposta = iaData.resposta
+                const imagemUrl = iaData.imagemUrl
 
                 if (resposta) {
                     // 4. Envia resposta da IA via WhatsApp usando token e phone_number_id do cliente
@@ -119,6 +120,42 @@ export async function POST(req: NextRequest) {
                             }
                         })
                     })
+
+                    // 5.5. Se a IA decidiu mostrar a foto de um produto, envia como imagem separada
+                    if (imagemUrl) {
+                        try {
+                            await fetch(baseUrl + '/api/whatsapp/send-media', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    telefone,
+                                    mediaUrl: imagemUrl,
+                                    tipo: 'image',
+                                    token: clienteToken,
+                                    phoneNumberId: clientePhoneNumberId,
+                                })
+                            })
+
+                            await fetch(url, {
+                                method: 'POST',
+                                headers: {
+                                    Authorization: 'Bearer ' + apiKey,
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    fields: {
+                                        telefone,
+                                        mensagem: '[Foto de produto enviada]',
+                                        tipo: 'enviada',
+                                        horario: new Date().toISOString(),
+                                        empresa
+                                    }
+                                })
+                            })
+                        } catch (e) {
+                            console.error('Erro ao enviar foto do produto:', e)
+                        }
+                    }
 
                     // 6. Detecta se o cliente confirmou um pedido nessa troca de mensagens
                     try {

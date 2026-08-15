@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { verificarRateLimit, obterIP } from '@/lib/rateLimit'
+
 export const maxDuration = 60
 
 const Airtable = require('airtable')
@@ -77,9 +78,7 @@ export async function POST(request: Request) {
         let produtosCache: any[] | null = null
         let imagemParaEnviar: string | null = null
 
-        // Loop de até 3 rodadas: permite a IA usar buscar_catalogo E mostrar_foto_produto
-        // na mesma conversa, uma depois da outra, antes de dar a resposta final em texto.
-        for (let rodada = 0; rodada < 3; rodada++) {
+        for (let rodada = 0; rodada < 4; rodada++) {
             const res = await fetch('https://api.anthropic.com/v1/messages', {
                 method: 'POST',
                 headers: {
@@ -103,46 +102,50 @@ export async function POST(request: Request) {
                 return NextResponse.json({ success: false, error: data }, { status: res.status })
             }
 
-            const chamadaFerramenta = data.content?.find((c: any) => c.type === 'tool_use')
+            // Pega TODOS os blocos de tool_use da resposta, não só o primeiro
+            const chamadasFerramenta = data.content?.filter((c: any) => c.type === 'tool_use') || []
 
-            if (!chamadaFerramenta) {
-                // A IA não pediu mais nenhuma ferramenta — essa é a resposta final
+            if (chamadasFerramenta.length === 0) {
+                // A IA não pediu nenhuma ferramenta — essa é a resposta final
                 const textoResposta = data.content?.find((c: any) => c.type === 'text')?.text || ''
                 return NextResponse.json({ success: true, resposta: textoResposta, imagemUrl: imagemParaEnviar })
             }
 
             mensagens.push({ role: 'assistant', content: data.content })
 
-            let resultadoFerramenta: any = null
+            // Monta um tool_result para CADA chamada de ferramenta pedida nesta rodada
+            const resultados: any[] = []
 
-            if (chamadaFerramenta.name === 'buscar_catalogo') {
-                if (!produtosCache) produtosCache = await buscarProdutos(empresa || '')
-                resultadoFerramenta = produtosCache
-            } else if (chamadaFerramenta.name === 'mostrar_foto_produto') {
-                if (!produtosCache) produtosCache = await buscarProdutos(empresa || '')
-                const nomeProcurado = (chamadaFerramenta.input?.nome_produto || '').toLowerCase()
-                const produto = produtosCache.find((p: any) => (p.nome || '').toLowerCase().includes(nomeProcurado))
-                if (produto?.foto) {
-                    imagemParaEnviar = produto.foto
-                    resultadoFerramenta = { enviado: true }
+            for (const chamada of chamadasFerramenta) {
+                let resultadoFerramenta: any = null
+
+                if (chamada.name === 'buscar_catalogo') {
+                    if (!produtosCache) produtosCache = await buscarProdutos(empresa || '')
+                    resultadoFerramenta = produtosCache
+                } else if (chamada.name === 'mostrar_foto_produto') {
+                    if (!produtosCache) produtosCache = await buscarProdutos(empresa || '')
+                    const nomeProcurado = (chamada.input?.nome_produto || '').toLowerCase()
+                    const produto = produtosCache.find((p: any) => (p.nome || '').toLowerCase().includes(nomeProcurado))
+                    if (produto?.foto) {
+                        imagemParaEnviar = produto.foto
+                        resultadoFerramenta = { enviado: true }
+                    } else {
+                        resultadoFerramenta = { enviado: false, motivo: 'Produto não encontrado ou sem foto cadastrada' }
+                    }
                 } else {
-                    resultadoFerramenta = { enviado: false, motivo: 'Produto não encontrado ou sem foto cadastrada' }
+                    resultadoFerramenta = { erro: 'Ferramenta desconhecida' }
                 }
+
+                resultados.push({
+                    type: 'tool_result',
+                    tool_use_id: chamada.id,
+                    content: JSON.stringify(resultadoFerramenta),
+                })
             }
 
-            mensagens.push({
-                role: 'user',
-                content: [
-                    {
-                        type: 'tool_result',
-                        tool_use_id: chamadaFerramenta.id,
-                        content: JSON.stringify(resultadoFerramenta),
-                    },
-                ],
-            })
+            mensagens.push({ role: 'user', content: resultados })
         }
 
-        // Se passou das 3 rodadas sem resposta final, retorna algo neutro em vez de travar
         return NextResponse.json({ success: true, resposta: 'Um momento, já te retorno!', imagemUrl: imagemParaEnviar })
     } catch (error: any) {
         console.error('WHATSAPP/IA - erro geral:', error)

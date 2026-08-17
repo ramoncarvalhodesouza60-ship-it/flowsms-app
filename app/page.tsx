@@ -711,7 +711,7 @@ export default function Home() {
     { id: 'catalogo', icon: '🛒', label: 'Catálogo' },
     { id: 'ia', icon: '🤖', label: 'IA / Assistente' },
     { id: 'templates', icon: '📄', label: 'Templates' },
-    { id: 'perfil', icon: '🏢', label: 'Perfil WhatsApp' },
+
     ...(configEmpresa?.ramal ? [{ id: 'ramal', icon: '📞', label: 'Ramal' }] : []),
     ...(configEmpresa?.whatsapp ? [{ id: 'whatsapp', icon: '💬', label: 'WhatsApp' }] : []),
   ]
@@ -720,7 +720,7 @@ export default function Home() {
     setSidebarOpen(false)
     if (id === 'templates' && !templatesCarregou) carregarTemplates()
     if (id === 'catalogo' && produtosLista.length === 0) carregarProdutos()
-    if (id === 'perfil' && !perfilCarregou) { setPerfilCarregou(true); carregarPerfil() }
+    if (id === 'whatsapp' && !perfilCarregou) { setPerfilCarregou(true); carregarPerfil() }
   }
 
   // ==================== LOGIN ====================
@@ -1287,72 +1287,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* ABA PERFIL WHATSAPP */}
-            {abaAtiva === 'perfil' && (
-              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '20px', padding: '28px' }}>
-                <h2 style={{ fontSize: '18px', fontWeight: 800, marginBottom: '6px' }}>🏢 Perfil do WhatsApp</h2>
-                <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '13px', marginBottom: '24px' }}>
-                  Foto e descrição que seus clientes veem ao abrir a conversa.
-                </p>
 
-                {perfilCarregando && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px', padding: '20px', textAlign: 'center' }}>Carregando...</div>}
-
-                {!perfilCarregando && (
-                  <>
-                    {perfilErro && (
-                      <div style={{ background: 'rgba(243,139,168,0.08)', border: '1px solid rgba(243,139,168,0.2)', color: '#f38ba8', padding: '10px 14px', borderRadius: '10px', fontSize: '13px', marginBottom: '20px' }}>
-                        ⚠️ {perfilErro}
-                      </div>
-                    )}
-
-                    {/* Nome de exibição - só leitura + link pro WhatsApp Manager */}
-                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '14px', padding: '16px 18px', marginBottom: '24px' }}>
-                      <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Nome de exibição</div>
-                      <div style={{ fontSize: '15px', color: 'white', fontWeight: 700, marginBottom: '4px' }}>{perfilNomeAtual || '—'}</div>
-                      <div style={{ fontSize: '12px', color: perfilNomeStatus === 'APPROVED' ? '#4ade80' : 'rgba(255,255,255,0.3)', marginBottom: '10px' }}>
-                        Status: {perfilNomeStatus || 'desconhecido'}
-                      </div>
-                      <a href="https://business.facebook.com/wa/manage" target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#FF6B00', textDecoration: 'none', fontWeight: 600 }}>
-                        Trocar nome no WhatsApp Manager →
-                      </a>
-                    </div>
-
-                    {/* Foto de perfil */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
-                      <div style={{ width: '80px', height: '80px', borderRadius: '50%', overflow: 'hidden', background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        {perfilFotoNova ? (
-                          <img src={perfilFotoNova} alt="Nova foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : perfilFotoUrl ? (
-                          <img src={perfilFotoUrl} alt="Foto atual" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : (
-                          <span style={{ fontSize: '26px', opacity: 0.2 }}>🏢</span>
-                        )}
-                      </div>
-                      <label style={{ display: 'inline-block', padding: '9px 16px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', color: 'rgba(255,255,255,0.6)', fontFamily: 'Inter, sans-serif' }}>
-                        Trocar foto
-                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) converterFotoPerfil(f) }} />
-                      </label>
-                    </div>
-
-                    {/* About */}
-                    <div style={{ marginBottom: '16px' }}>
-                      <label style={{ display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginBottom: '6px' }}>Frase curta (about) — máx. 139 caracteres</label>
-                      <input className="inp-focus" value={perfilAbout} onChange={e => setPerfilAbout(e.target.value.slice(0, 139))} placeholder="Ex: Atendimento rápido via WhatsApp" style={{ ...inp, width: '100%' }} />
-                    </div>
-
-                    {/* Descrição */}
-                    <div style={{ marginBottom: '24px' }}>
-                      <label style={{ display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginBottom: '6px' }}>Descrição — máx. 512 caracteres</label>
-                      <textarea value={perfilDescricao} onChange={e => setPerfilDescricao(e.target.value.slice(0, 512))} placeholder="Conte um pouco sobre sua empresa..." rows={3} style={{ ...inp, width: '100%', resize: 'vertical', fontFamily: 'Inter, sans-serif' }} />
-                    </div>
-
-                    <button onClick={salvarPerfil} disabled={perfilSalvando} style={{ padding: '12px 24px', background: 'linear-gradient(135deg,#FF6B00,#ff8c33)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, fontFamily: 'Inter, sans-serif', boxShadow: '0 4px 12px rgba(255,107,0,0.3)' }}>
-                      {perfilSalvando ? 'Salvando...' : 'Salvar perfil'}
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
 
             {/* ABA RAMAL */}
             {abaAtiva === 'ramal' && (
@@ -1404,6 +1339,67 @@ export default function Home() {
                 <button onClick={enviarWhatsApp} disabled={waEnviando} style={{ width: '100%', padding: '14px', background: waEnviando ? 'rgba(255,255,255,0.04)' : 'linear-gradient(135deg,#25d366,#20ba58)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: 700, cursor: waEnviando ? 'not-allowed' : 'pointer', fontFamily: 'Inter, sans-serif', boxShadow: waEnviando ? 'none' : '0 4px 16px rgba(37,211,102,0.3)' }}>
                   {waEnviando ? 'Enviando...' : '💬 Enviar WhatsApp'}
                 </button>
+
+                {/* Sub-seção: Perfil do WhatsApp */}
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: '32px', paddingTop: '28px' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '6px' }}>🏢 Perfil do WhatsApp</h3>
+                  <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '13px', marginBottom: '20px' }}>
+                    Foto e descrição que seus clientes veem ao abrir a conversa.
+                  </p>
+
+                  {perfilCarregando && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px', padding: '20px', textAlign: 'center' }}>Carregando...</div>}
+
+                  {!perfilCarregando && (
+                    <>
+                      {perfilErro && (
+                        <div style={{ background: 'rgba(243,139,168,0.08)', border: '1px solid rgba(243,139,168,0.2)', color: '#f38ba8', padding: '10px 14px', borderRadius: '10px', fontSize: '13px', marginBottom: '20px' }}>
+                          ⚠️ {perfilErro}
+                        </div>
+                      )}
+
+                      <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '14px', padding: '16px 18px', marginBottom: '24px' }}>
+                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Nome de exibição</div>
+                        <div style={{ fontSize: '15px', color: 'white', fontWeight: 700, marginBottom: '4px' }}>{perfilNomeAtual || '—'}</div>
+                        <div style={{ fontSize: '12px', color: perfilNomeStatus === 'APPROVED' ? '#4ade80' : 'rgba(255,255,255,0.3)', marginBottom: '10px' }}>
+                          Status: {perfilNomeStatus || 'desconhecido'}
+                        </div>
+                        <a href="https://business.facebook.com/wa/manage" target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#FF6B00', textDecoration: 'none', fontWeight: 600 }}>
+                          Trocar nome no WhatsApp Manager →
+                        </a>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
+                        <div style={{ width: '80px', height: '80px', borderRadius: '50%', overflow: 'hidden', background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {perfilFotoNova ? (
+                            <img src={perfilFotoNova} alt="Nova foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : perfilFotoUrl ? (
+                            <img src={perfilFotoUrl} alt="Foto atual" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            <span style={{ fontSize: '26px', opacity: 0.2 }}>🏢</span>
+                          )}
+                        </div>
+                        <label style={{ display: 'inline-block', padding: '9px 16px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', color: 'rgba(255,255,255,0.6)', fontFamily: 'Inter, sans-serif' }}>
+                          Trocar foto
+                          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) converterFotoPerfil(f) }} />
+                        </label>
+                      </div>
+
+                      <div style={{ marginBottom: '16px' }}>
+                        <label style={{ display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginBottom: '6px' }}>Frase curta (about) — máx. 139 caracteres</label>
+                        <input className="inp-focus" value={perfilAbout} onChange={e => setPerfilAbout(e.target.value.slice(0, 139))} placeholder="Ex: Atendimento rápido via WhatsApp" style={{ ...inp, width: '100%' }} />
+                      </div>
+
+                      <div style={{ marginBottom: '24px' }}>
+                        <label style={{ display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginBottom: '6px' }}>Descrição — máx. 512 caracteres</label>
+                        <textarea value={perfilDescricao} onChange={e => setPerfilDescricao(e.target.value.slice(0, 512))} placeholder="Conte um pouco sobre sua empresa..." rows={3} style={{ ...inp, width: '100%', resize: 'vertical', fontFamily: 'Inter, sans-serif' }} />
+                      </div>
+
+                      <button onClick={salvarPerfil} disabled={perfilSalvando} style={{ padding: '12px 24px', background: 'linear-gradient(135deg,#FF6B00,#ff8c33)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, fontFamily: 'Inter, sans-serif', boxShadow: '0 4px 12px rgba(255,107,0,0.3)' }}>
+                        {perfilSalvando ? 'Salvando...' : 'Salvar perfil'}
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </div>

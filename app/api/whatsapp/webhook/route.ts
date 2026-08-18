@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
             // 3. Busca o histórico da conversa (já incluindo a mensagem que acabou de ser salva) e chama a IA com ele
             if (texto) {
                 const historico = await buscarHistoricoConversa(baseId!, tableId!, apiKey!, telefone, empresa)
+                console.log('HISTORICO BUSCADO:', historico.length, 'mensagens:', JSON.stringify(historico))
 
                 const iaRes = await fetch(baseUrl + '/api/whatsapp/ia', {
                     method: 'POST',

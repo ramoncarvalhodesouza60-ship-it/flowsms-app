@@ -19,15 +19,24 @@ const respostasRapidas = [
     { label: 'Fechamento', texto: 'Perfeito! Vou processar tudo agora. Você receberá a confirmação em breve!' },
 ]
 
-const colunas = [
-    { id: 'novo', label: 'Novo', cor: '#74c7ec', bg: 'rgba(116,199,236,0.08)', borda: 'rgba(116,199,236,0.2)' },
-    { id: 'em_atendimento', label: 'Em Atendimento', cor: '#f9e2af', bg: 'rgba(249,226,175,0.08)', borda: 'rgba(249,226,175,0.2)' },
-    { id: 'proposta', label: 'Proposta Enviada', cor: '#FF6B00', bg: 'rgba(255,107,0,0.08)', borda: 'rgba(255,107,0,0.2)' },
-    { id: 'convertido', label: 'Convertido', cor: '#22c55e', bg: 'rgba(34,197,94,0.08)', borda: 'rgba(34,197,94,0.2)' },
-    { id: 'perdido', label: 'Perdido', cor: '#f38ba8', bg: 'rgba(243,139,168,0.08)', borda: 'rgba(243,139,168,0.2)' },
-    { id: 'entregue', label: 'Entregue', cor: '#a78bfa', bg: 'rgba(167,139,250,0.08)', borda: 'rgba(167,139,250,0.2)' },
+const colunasPadrao = [
+    { id: 'novo', label: 'Novo', cor: '#74c7ec' },
+    { id: 'em_atendimento', label: 'Em Atendimento', cor: '#f9e2af' },
+    { id: 'proposta', label: 'Proposta Enviada', cor: '#FF6B00' },
+    { id: 'convertido', label: 'Convertido', cor: '#22c55e' },
+    { id: 'perdido', label: 'Perdido', cor: '#f38ba8' },
+    { id: 'entregue', label: 'Entregue', cor: '#a78bfa' },
 ]
 
+// Converte uma cor hex (#RRGGBB) em rgba com opacidade, para gerar fundo/borda das colunas dinamicamente
+function hexParaRgba(hex: string, alpha: number): string {
+    const limpo = hex.replace('#', '')
+    const bigint = parseInt(limpo, 16)
+    const r = (bigint >> 16) & 255
+    const g = (bigint >> 8) & 255
+    const b = bigint & 255
+    return `rgba(${r},${g},${b},${alpha})`
+}
 type MensagemAirtable = {
     id: string
     telefone: string
@@ -115,6 +124,11 @@ function WhatsAppConteudo() {
     const [iaAtiva, setIaAtiva] = useState(true)
     const [view, setView] = useState<'conversas' | 'kanban' | 'disparos'>('conversas')
     const [dragId, setDragId] = useState<string | null>(null)
+    const [colunas, setColunas] = useState(colunasPadrao)
+    const [colunasCarregadas, setColunasCarregadas] = useState(false)
+    const [editandoColunas, setEditandoColunas] = useState(false)
+    const [dragColunaId, setDragColunaId] = useState<string | null>(null)
+    const [novaColunaLabel, setNovaColunaLabel] = useState('')
     const [mostrarRespostas, setMostrarRespostas] = useState(false)
     const [mostrarTags, setMostrarTags] = useState(false)
     const [tagsPorContato, setTagsPorContato] = useState<Record<string, string[]>>({})
@@ -149,6 +163,65 @@ function WhatsAppConteudo() {
     const mensagensEndRef = useRef<HTMLDivElement>(null)
 
     const horarioAtual = () => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+
+    async function carregarColunas() {
+        try {
+            const res = await fetch('/api/kanban-colunas?empresa=' + encodeURIComponent(empresaAtual))
+            const data = await res.json()
+            if (data.success && Array.isArray(data.colunas) && data.colunas.length > 0) {
+                setColunas(data.colunas)
+            }
+        } catch (e) {
+            console.error('Erro ao carregar colunas:', e)
+        }
+        setColunasCarregadas(true)
+    }
+
+    async function salvarColunas(novasColunas: typeof colunasPadrao) {
+        setColunas(novasColunas)
+        try {
+            await fetch('/api/kanban-colunas', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ empresa: empresaAtual, colunas: novasColunas }),
+            })
+        } catch (e) {
+            console.error('Erro ao salvar colunas:', e)
+        }
+    }
+
+    function adicionarColuna() {
+        if (!novaColunaLabel.trim()) return
+        const coresDisponiveis = ['#74c7ec', '#f9e2af', '#FF6B00', '#22c55e', '#f38ba8', '#a78bfa', '#fab387', '#94e2d5']
+        const cor = coresDisponiveis[colunas.length % coresDisponiveis.length]
+        const id = 'col_' + Date.now()
+        salvarColunas([...colunas, { id, label: novaColunaLabel.trim(), cor }])
+        setNovaColunaLabel('')
+    }
+
+    function renomearColuna(id: string, novoLabel: string) {
+        salvarColunas(colunas.map(c => c.id === id ? { ...c, label: novoLabel } : c))
+    }
+
+    function mudarCorColuna(id: string, novaCor: string) {
+        salvarColunas(colunas.map(c => c.id === id ? { ...c, cor: novaCor } : c))
+    }
+
+    function deletarColuna(id: string) {
+        if (colunas.length <= 1) return
+        salvarColunas(colunas.filter(c => c.id !== id))
+    }
+
+    function reordenarColunas(idArrastado: string, idAlvo: string) {
+        if (idArrastado === idAlvo) return
+        const lista = [...colunas]
+        const indiceOrigem = lista.findIndex(c => c.id === idArrastado)
+        const indiceDestino = lista.findIndex(c => c.id === idAlvo)
+        if (indiceOrigem === -1 || indiceDestino === -1) return
+        const [item] = lista.splice(indiceOrigem, 1)
+        lista.splice(indiceDestino, 0, item)
+        salvarColunas(lista)
+    }
 
     async function carregarMensagens() {
         try {
@@ -206,6 +279,12 @@ function WhatsAppConteudo() {
 
     useEffect(() => {
         carregarMensagens()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [empresaAtual])
+
+
+    useEffect(() => {
+        if (empresaAtual) carregarColunas()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [empresaAtual])
 
@@ -800,7 +879,7 @@ function WhatsAppConteudo() {
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                                                 <span style={{ color: '#666', fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '150px' }}>{c.ultimaMensagem}</span>
                                                 <div style={{ display: 'flex', gap: '3px' }}>
-                                                    {col && <span style={{ fontSize: '8px', color: col.cor, background: col.bg, padding: '1px 5px', borderRadius: '8px' }}>{col.label}</span>}
+                                                    {col && <span style={{ fontSize: '8px', color: col.cor, background: hexParaRgba(col.cor, 0.15), padding: '1px 5px', borderRadius: '8px' }}>{col.label}</span>}
                                                     {c.naoLidas > 0 && <span style={{ background: '#22c55e', color: 'white', borderRadius: '50%', width: '15px', height: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px', fontWeight: 700 }}>{c.naoLidas}</span>}
                                                 </div>
                                             </div>
@@ -1011,57 +1090,99 @@ function WhatsAppConteudo() {
 
             {/* VIEW KANBAN */}
             {view === 'kanban' && contatos.length > 0 && (
-                <div style={{ flex: 1, overflowX: 'auto', padding: '24px', display: 'flex', gap: '16px' }}>
-                    {colunas.map(col => {
-                        const cards = contatos.filter(c => c.etapa === col.id)
-                        return (
-                            <div key={col.id}
-                                onDragOver={e => e.preventDefault()}
-                                onDrop={() => { if (dragId !== null) { moverParaColuna(dragId, col.id); setDragId(null) } }}
-                                style={{ minWidth: '300px', maxWidth: '300px', background: col.bg, border: `1px solid ${col.borda}`, borderRadius: '12px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                                    <span style={{ color: col.cor, fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{col.label}</span>
-                                    <span style={{ background: col.borda, color: col.cor, borderRadius: '12px', padding: '2px 8px', fontSize: '11px', fontWeight: 700 }}>{cards.length}</span>
+                <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ padding: '16px 24px 0', display: 'flex', justifyContent: 'flex-end' }}>
+                        <button onClick={() => setEditandoColunas(!editandoColunas)} style={{ background: editandoColunas ? '#FF6B00' : '#1a1a1a', border: '1px solid #2a2a2a', color: editandoColunas ? 'white' : '#888', padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'Arial' }}>
+                            {editandoColunas ? '✓ Concluir edição' : '✏️ Editar colunas'}
+                        </button>
+                    </div>
+                    <div style={{ flex: 1, overflowX: 'auto', padding: '16px 24px 24px', display: 'flex', gap: '16px' }}>
+                        {colunas.map(col => {
+                            const cards = contatos.filter(c => c.etapa === col.id)
+                            const bg = hexParaRgba(col.cor, 0.08)
+                            const borda = hexParaRgba(col.cor, 0.2)
+                            return (
+                                <div key={col.id}
+                                    draggable={editandoColunas}
+                                    onDragStart={() => editandoColunas && setDragColunaId(col.id)}
+                                    onDragOver={e => e.preventDefault()}
+                                    onDrop={() => {
+                                        if (editandoColunas && dragColunaId) { reordenarColunas(dragColunaId, col.id); setDragColunaId(null) }
+                                        else if (dragId !== null) { moverParaColuna(dragId, col.id); setDragId(null) }
+                                    }}
+                                    style={{ minWidth: '300px', maxWidth: '300px', background: bg, border: `1px solid ${borda}`, borderRadius: '12px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px', cursor: editandoColunas ? 'grab' : 'default' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', gap: '8px' }}>
+                                        {editandoColunas ? (
+                                            <input value={col.label} onChange={e => renomearColuna(col.id, e.target.value)}
+                                                style={{ flex: 1, background: '#0d0d0d', border: '1px solid #2a2a2a', borderRadius: '6px', color: col.cor, fontSize: '12px', fontWeight: 700, padding: '4px 8px', outline: 'none', fontFamily: 'Arial' }} />
+                                        ) : (
+                                            <span style={{ color: col.cor, fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{col.label}</span>
+                                        )}
+                                        {editandoColunas ? (
+                                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0 }}>
+                                                <input type="color" value={col.cor} onChange={e => mudarCorColuna(col.id, e.target.value)}
+                                                    style={{ width: '22px', height: '22px', padding: 0, border: 'none', borderRadius: '5px', cursor: 'pointer', background: 'transparent' }} />
+                                                <button onClick={() => deletarColuna(col.id)} disabled={colunas.length <= 1}
+                                                    style={{ background: 'rgba(243,139,168,0.15)', border: 'none', color: '#f38ba8', width: '22px', height: '22px', borderRadius: '5px', cursor: colunas.length <= 1 ? 'not-allowed' : 'pointer', fontSize: '12px', opacity: colunas.length <= 1 ? 0.3 : 1 }}>
+                                                    ✕
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <span style={{ background: borda, color: col.cor, borderRadius: '12px', padding: '2px 8px', fontSize: '11px', fontWeight: 700 }}>{cards.length}</span>
+                                        )}
+                                    </div>
+                                    {cards.map(c => {
+                                        const tags = tagsPorContato[c.id] || []
+                                        return (
+                                            <div key={c.id} draggable onDragStart={() => setDragId(c.id)}
+                                                onClick={() => { setConversaSelecionada(c); setView('conversas') }}
+                                                style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: '10px', padding: '12px', cursor: 'grab' }}>
+                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
+                                                    <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: c.temNome ? '#FF6B0033' : '#33333355', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: c.temNome ? '12px' : '14px', fontWeight: 700, color: c.temNome ? '#FF6B00' : '#777', flexShrink: 0 }}>{c.temNome ? c.nome[0] : '👤'}</div>
+                                                    <div>
+                                                        <div style={{ color: c.temNome ? 'white' : '#999', fontSize: '12px', fontWeight: 600, fontStyle: c.temNome ? 'normal' : 'italic' }}>{c.temNome ? c.nome : 'Sem cadastro'}</div>
+                                                        <div style={{ color: '#555', fontSize: '10px' }}>{c.telefone}</div>
+                                                    </div>
+                                                </div>
+                                                <div style={{ color: '#666', fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '6px' }}>{c.ultimaMensagem}</div>
+                                                {tags.length > 0 && (
+                                                    <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                                                        {tags.map(tagId => {
+                                                            const tag = tagsDisponiveis.find(t => t.id === tagId)
+                                                            return tag ? <span key={tagId} style={{ fontSize: '8px', color: tag.cor, background: tag.bg, padding: '1px 5px', borderRadius: '8px', fontWeight: 600 }}>{tag.label}</span> : null
+                                                        })}
+                                                    </div>
+                                                )}
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <span style={{ color: '#444', fontSize: '10px' }}>{c.horario}</span>
+                                                    {c.naoLidas > 0 && <span style={{ background: '#22c55e', color: 'white', borderRadius: '50%', width: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', fontWeight: 700 }}>{c.naoLidas}</span>}
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                    {cards.length === 0 && <div style={{ color: '#333', fontSize: '12px', textAlign: 'center', padding: '20px 0' }}>Nenhum lead</div>}
                                 </div>
-                                {cards.map(c => {
-                                    const tags = tagsPorContato[c.id] || []
-                                    return (
-                                        <div key={c.id} draggable onDragStart={() => setDragId(c.id)}
-                                            onClick={() => { setConversaSelecionada(c); setView('conversas') }}
-                                            style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: '10px', padding: '12px', cursor: 'grab' }}>
-                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
-                                                <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: c.temNome ? '#FF6B0033' : '#33333355', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: c.temNome ? '12px' : '14px', fontWeight: 700, color: c.temNome ? '#FF6B00' : '#777', flexShrink: 0 }}>{c.temNome ? c.nome[0] : '👤'}</div>
-                                                <div>
-                                                    <div style={{ color: c.temNome ? 'white' : '#999', fontSize: '12px', fontWeight: 600, fontStyle: c.temNome ? 'normal' : 'italic' }}>{c.temNome ? c.nome : 'Sem cadastro'}</div>
-                                                    <div style={{ color: '#555', fontSize: '10px' }}>{c.telefone}</div>
-                                                </div>
-                                            </div>
-                                            <div style={{ color: '#666', fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '6px' }}>{c.ultimaMensagem}</div>
-                                            {tags.length > 0 && (
-                                                <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', marginBottom: '6px' }}>
-                                                    {tags.map(tagId => {
-                                                        const tag = tagsDisponiveis.find(t => t.id === tagId)
-                                                        return tag ? <span key={tagId} style={{ fontSize: '8px', color: tag.cor, background: tag.bg, padding: '1px 5px', borderRadius: '8px', fontWeight: 600 }}>{tag.label}</span> : null
-                                                    })}
-                                                </div>
-                                            )}
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <span style={{ color: '#444', fontSize: '10px' }}>{c.horario}</span>
-                                                {c.naoLidas > 0 && <span style={{ background: '#22c55e', color: 'white', borderRadius: '50%', width: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', fontWeight: 700 }}>{c.naoLidas}</span>}
-                                            </div>
-                                        </div>
-                                    )
-                                })}
-                                {cards.length === 0 && <div style={{ color: '#333', fontSize: '12px', textAlign: 'center', padding: '20px 0' }}>Nenhum lead</div>}
+                            )
+                        })}
+                        {editandoColunas && (
+                            <div style={{ minWidth: '260px', maxWidth: '260px', background: '#111', border: '1px dashed #2a2a2a', borderRadius: '12px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '10px', height: 'fit-content' }}>
+                                <span style={{ color: '#888', fontSize: '12px', fontWeight: 700 }}>+ Nova coluna</span>
+                                <input value={novaColunaLabel} onChange={e => setNovaColunaLabel(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && adicionarColuna()}
+                                    placeholder="Nome da coluna"
+                                    style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '8px', color: 'white', fontSize: '12px', padding: '8px 12px', outline: 'none', fontFamily: 'Arial' }} />
+                                <button onClick={adicionarColuna} disabled={!novaColunaLabel.trim()}
+                                    style={{ background: '#FF6B00', border: 'none', color: 'white', padding: '8px', borderRadius: '8px', cursor: novaColunaLabel.trim() ? 'pointer' : 'not-allowed', fontSize: '12px', fontWeight: 700, fontFamily: 'Arial', opacity: novaColunaLabel.trim() ? 1 : 0.4 }}>
+                                    Adicionar
+                                </button>
                             </div>
-                        )
-                    })}
+                        )}
+                    </div>
                 </div>
             )}
         </div>
     )
 }
-
 
 
 

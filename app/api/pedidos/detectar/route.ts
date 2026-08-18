@@ -7,17 +7,18 @@ export async function POST(request: Request) {
         const apiKey = process.env.ANTHROPIC_API_KEY
 
         const prompt = `Você é um sistema de análise de conversas de vendas. Analise a troca de mensagens abaixo entre um cliente e um atendente (IA) de uma empresa, e determine se o CLIENTE acabou de CONFIRMAR um pedido de compra (não apenas demonstrar interesse ou fazer pergunta).
-
+ 
 Mensagem do cliente: "${mensagemCliente}"
 Resposta do atendente: "${respostaIA}"
-
+ 
 Regras importantes:
-- Só considere como pedido confirmado se o cliente expressou claramente a intenção de comprar/fechar (ex: "quero sim", "pode confirmar", "vou levar", "fechado", "pode mandar")
+- Só considere como pedido confirmado se DUAS coisas aconteceram juntas: (1) o cliente expressou claramente a intenção de comprar/fechar (ex: "quero sim", "pode confirmar", "vou levar", "fechado", "pode mandar"), E (2) já existe um valor/preço real e específico estabelecido na conversa para esse pedido (não vale "R$ 0" ou preço não mencionado)
+- Se o cliente demonstrou intenção de compra mas NÃO existe um valor real calculado na conversa (ex: o atendente disse que não tem essa informação disponível, ou pediu pra falar com a loja), isso NÃO conta como pedido confirmado — é só interesse forte, não confirmação
 - Perguntas, dúvidas, ou expressões vagas de interesse ("vou pensar", "talvez", "quanto custa") NÃO contam como confirmação
-- Se não houver confirmação clara, responda apenas: {"pedido_confirmado": false}
-- Se houver confirmação clara, extraia o máximo de informação possível da conversa e responda EXATAMENTE neste formato JSON, sem nenhum texto antes ou depois:
-{"pedido_confirmado": true, "produto": "nome do produto/serviço mencionado ou 'Não especificado'", "valor": número ou null se não mencionado, "forma_pagamento": "forma de pagamento mencionada ou 'Não especificado'"}
-
+- Se não houver confirmação clara COM valor definido, responda apenas: {"pedido_confirmado": false}
+- Se houver confirmação clara E valor definido, extraia o máximo de informação possível da conversa e responda EXATAMENTE neste formato JSON, sem nenhum texto antes ou depois:
+{"pedido_confirmado": true, "produto": "nome do produto/serviço mencionado ou 'Não especificado'", "valor": número, "forma_pagamento": "forma de pagamento mencionada ou 'Não especificado'"}
+ 
 Responda APENAS o JSON, nada mais.`
 
         const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -37,7 +38,6 @@ Responda APENAS o JSON, nada mais.`
         const data = await res.json()
         const textoResposta = data?.content?.[0]?.text || '{"pedido_confirmado": false}'
 
-        // Remove possíveis blocos de markdown json que a IA às vezes adiciona
         const textoLimpo = textoResposta.replace(/json|```/g, '').trim()
 
         let resultado

@@ -22,7 +22,7 @@ async function buscarHistoricoConversa(baseId: string, tableId: string, apiKey: 
     const filtro = 'AND({telefone} = "' + telefone + '", {empresa} = "' + empresa + '")'
     const url = 'https://api.airtable.com/v0/' + baseId + '/' + tableId +
         '?filterByFormula=' + encodeURIComponent(filtro) +
-        '&sort[0][field]=horario&sort[0][direction]=desc&maxRecords=20'
+        '&sort[0][field]=horario&sort[0][direction]=desc&maxRecords=30'
 
     const res = await fetch(url, { headers: { Authorization: 'Bearer ' + apiKey } })
     const data = await res.json()
@@ -101,7 +101,6 @@ export async function POST(req: NextRequest) {
             // 3. Busca o histórico da conversa (já incluindo a mensagem que acabou de ser salva) e chama a IA com ele
             if (texto) {
                 const historico = await buscarHistoricoConversa(baseId!, tableId!, apiKey!, telefone, empresa)
-                console.log('HISTORICO BUSCADO:', historico.length, 'mensagens:', JSON.stringify(historico))
 
                 const iaRes = await fetch(baseUrl + '/api/whatsapp/ia', {
                     method: 'POST',

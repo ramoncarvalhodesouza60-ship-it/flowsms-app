@@ -207,6 +207,28 @@ export async function POST(req: NextRequest) {
                     } catch (e) {
                         console.error('Erro ao detectar/notificar pedido:', e)
                     }
+
+                    // 8. Detecta se o lead está "quente" (interesse forte, mesmo sem pedido confirmado) e notifica
+                    try {
+                        const historicoAtualizado = await buscarHistoricoConversa(baseId!, tableId!, apiKey!, telefone, empresa)
+
+                        const quenteRes = await fetch(baseUrl + '/api/leads/detectar-quente', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ historico: historicoAtualizado })
+                        })
+                        const quenteData = await quenteRes.json()
+
+                        if (quenteData?.lead_quente) {
+                            await fetch(baseUrl + '/api/leads/notificar-quente', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ telefone, empresa })
+                            })
+                        }
+                    } catch (e) {
+                        console.error('Erro ao detectar/notificar lead quente:', e)
+                    }
                 }
             }
         }

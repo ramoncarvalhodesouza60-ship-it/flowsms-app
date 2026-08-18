@@ -312,6 +312,14 @@ export default function Home() {
   const [perfilSalvando, setPerfilSalvando] = useState(false)
   const [perfilErro, setPerfilErro] = useState('')
   const [perfilCarregou, setPerfilCarregou] = useState(false)
+
+  // Estados da tela de Configurações
+  const [configAberta, setConfigAberta] = useState(false)
+  const [configTelefoneAdmin, setConfigTelefoneAdmin] = useState('')
+  const [configCarregando, setConfigCarregando] = useState(false)
+  const [configSalvando, setConfigSalvando] = useState(false)
+  const [configErro, setConfigErro] = useState('')
+  const [configSucesso, setConfigSucesso] = useState(false)
   async function entrar() {
     setLoading(true)
     try {
@@ -657,6 +665,51 @@ export default function Home() {
     setPerfilSalvando(false)
   }
 
+  async function carregarConfig() {
+    setConfigCarregando(true)
+    setConfigErro('')
+    try {
+      const res = await fetch('/api/config-cliente?empresa=' + encodeURIComponent(empresaAtual))
+      const data = await res.json()
+      if (data.success) {
+        setConfigTelefoneAdmin(data.telefoneAdmin || '')
+      } else {
+        setConfigErro(data.error || 'Erro ao carregar configurações')
+      }
+    } catch (e: any) {
+      setConfigErro('Erro de conexão: ' + e.message)
+    }
+    setConfigCarregando(false)
+  }
+
+  async function salvarConfig() {
+    setConfigSalvando(true)
+    setConfigErro('')
+    setConfigSucesso(false)
+    try {
+      const res = await fetch('/api/config-cliente', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empresa: empresaAtual, telefoneAdmin: configTelefoneAdmin }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setConfigSucesso(true)
+        setTimeout(() => setConfigSucesso(false), 3000)
+      } else {
+        setConfigErro(data.error || 'Erro ao salvar')
+      }
+    } catch (e: any) {
+      setConfigErro('Erro de conexão: ' + e.message)
+    }
+    setConfigSalvando(false)
+  }
+
+  function abrirConfig() {
+    setConfigAberta(true)
+    carregarConfig()
+  }
+
   async function deletarProduto(id: string) {
     await fetch('/api/produtos', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
     carregarProdutos()
@@ -878,7 +931,10 @@ export default function Home() {
           <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', marginBottom: '10px' }}>
               <div style={{ width: '32px', height: '32px', borderRadius: '9px', background: 'linear-gradient(135deg,#FF6B00,#ff9a4d)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800, flexShrink: 0 }}>{initials}</div>
-              <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{empresaAtual}</span>
+              <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{empresaAtual}</span>
+              <button onClick={abrirConfig} title="Configurações" style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: '15px', padding: '4px', flexShrink: 0 }}>
+                ⚙️
+              </button>
             </div>
             <button onClick={() => setLogado(false)} style={{ width: '100%', background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.3)', border: '1px solid rgba(255,255,255,0.06)', padding: '9px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontFamily: 'Inter, sans-serif' }}>
               Sair
@@ -1300,6 +1356,57 @@ export default function Home() {
                     <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: '12px', marginTop: '6px' }}>Aguardando upgrade</div>
                   </div>
                   <span style={{ background: 'rgba(249,226,175,0.08)', border: '1px solid rgba(249,226,175,0.2)', color: '#f9e2af', padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 600 }}>⏳ Pendente</span>
+                </div>
+              </div>
+            )}
+
+            {/* MODAL DE CONFIGURAÇÕES */}
+            {configAberta && (
+              <div onClick={() => setConfigAberta(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                <div onClick={e => e.stopPropagation()} style={{ background: '#0a0a0d', border: '1px solid rgba(255,107,0,0.2)', borderRadius: '20px', padding: '28px', maxWidth: '440px', width: '100%', boxShadow: '0 32px 64px rgba(0,0,0,0.8)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <h2 style={{ fontSize: '17px', fontWeight: 800 }}>⚙️ Configurações</h2>
+                    <button onClick={() => setConfigAberta(false)} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+                  </div>
+
+                  {configCarregando && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px', padding: '20px 0', textAlign: 'center' }}>Carregando...</div>}
+
+                  {!configCarregando && (
+                    <>
+                      {configErro && (
+                        <div style={{ background: 'rgba(243,139,168,0.08)', border: '1px solid rgba(243,139,168,0.2)', color: '#f38ba8', padding: '10px 14px', borderRadius: '10px', fontSize: '13px', marginBottom: '16px' }}>
+                          ⚠️ {configErro}
+                        </div>
+                      )}
+
+                      {configSucesso && (
+                        <div style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e', padding: '10px 14px', borderRadius: '10px', fontSize: '13px', marginBottom: '16px' }}>
+                          ✓ Salvo com sucesso!
+                        </div>
+                      )}
+
+                      <div style={{ marginBottom: '20px' }}>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>
+                          WhatsApp para notificações
+                        </label>
+                        <input
+                          className="inp-focus"
+                          type="text"
+                          placeholder="+5511999999999"
+                          value={configTelefoneAdmin}
+                          onChange={e => setConfigTelefoneAdmin(e.target.value)}
+                          style={inp}
+                        />
+                        <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: '11px', marginTop: '8px', lineHeight: 1.5 }}>
+                          Número que recebe avisos de novos pedidos e leads quentes.
+                        </p>
+                      </div>
+
+                      <button onClick={salvarConfig} disabled={configSalvando} style={{ width: '100%', padding: '13px', background: configSalvando ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg,#FF6B00,#ff8c33)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: 700, cursor: configSalvando ? 'not-allowed' : 'pointer', fontFamily: 'Inter, sans-serif' }}>
+                        {configSalvando ? 'Salvando...' : 'Salvar'}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             )}

@@ -66,14 +66,19 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'Limite de requisições atingido' }, { status: 429 })
         }
 
-        const { mensagem, systemPrompt, empresa } = await request.json()
+        const { historico, systemPrompt, empresa } = await request.json()
 
-        if (!mensagem) {
-            return NextResponse.json({ success: false, error: 'mensagem não informada' }, { status: 400 })
+        if (!Array.isArray(historico) || historico.length === 0) {
+            return NextResponse.json({ success: false, error: 'histórico não informado ou vazio' }, { status: 400 })
         }
 
         const systemFinal = systemPrompt || 'Você é um assistente de atendimento simpático e prestativo.'
-        const mensagens: any[] = [{ role: 'user', content: mensagem }]
+
+        // Converte o histórico (tipo 'recebida'/'enviada') para o formato que a Claude API espera (role 'user'/'assistant')
+        const mensagens: any[] = historico.map((h: { tipo: string; mensagem: string }) => ({
+            role: h.tipo === 'recebida' ? 'user' : 'assistant',
+            content: h.mensagem,
+        }))
 
         let produtosCache: any[] | null = null
         let imagemParaEnviar: string | null = null
@@ -102,18 +107,15 @@ export async function POST(request: Request) {
                 return NextResponse.json({ success: false, error: data }, { status: res.status })
             }
 
-            // Pega TODOS os blocos de tool_use da resposta, não só o primeiro
             const chamadasFerramenta = data.content?.filter((c: any) => c.type === 'tool_use') || []
 
             if (chamadasFerramenta.length === 0) {
-                // A IA não pediu nenhuma ferramenta — essa é a resposta final
                 const textoResposta = data.content?.find((c: any) => c.type === 'text')?.text || ''
                 return NextResponse.json({ success: true, resposta: textoResposta, imagemUrl: imagemParaEnviar })
             }
 
             mensagens.push({ role: 'assistant', content: data.content })
 
-            // Monta um tool_result para CADA chamada de ferramenta pedida nesta rodada
             const resultados: any[] = []
 
             for (const chamada of chamadasFerramenta) {

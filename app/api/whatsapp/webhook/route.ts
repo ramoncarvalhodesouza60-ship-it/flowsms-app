@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+
 export const maxDuration = 60
 
 const VERIFY_TOKEN = 'flowsms2024'
@@ -13,6 +14,24 @@ export async function GET(req: NextRequest) {
         return new NextResponse(challenge, { status: 200 })
     }
     return new NextResponse('Forbidden', { status: 403 })
+}
+
+// Busca as últimas N mensagens dessa conversa (telefone + empresa) no Airtable,
+// já ordenadas do mais antigo pro mais recente, no formato que a IA espera.
+async function buscarHistoricoConversa(baseId: string, tableId: string, apiKey: string, telefone: string, empresa: string) {
+    const filtro = 'AND({telefone} = "' + telefone + '", {empresa} = "' + empresa + '")'
+    const url = 'https://api.airtable.com/v0/' + baseId + '/' + tableId +
+        '?filterByFormula=' + encodeURIComponent(filtro) +
+        '&sort[0][field]=horario&sort[0][direction]=desc&maxRecords=20'
+
+    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + apiKey } })
+    const data = await res.json()
+
+    const registros = (data.records || [])
+        .map((r: any) => ({ tipo: r.fields.tipo, mensagem: r.fields.mensagem }))
+        .reverse() // volta pra ordem cronológica (mais antigo primeiro)
+
+    return registros
 }
 
 export async function POST(req: NextRequest) {
@@ -79,12 +98,14 @@ export async function POST(req: NextRequest) {
                 })
             })
 
-            // 3. Chama a IA com o system prompt do cliente
+            // 3. Busca o histórico da conversa (já incluindo a mensagem que acabou de ser salva) e chama a IA com ele
             if (texto) {
+                const historico = await buscarHistoricoConversa(baseId!, tableId!, apiKey!, telefone, empresa)
+
                 const iaRes = await fetch(baseUrl + '/api/whatsapp/ia', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mensagem: texto, systemPrompt, empresa })
+                    body: JSON.stringify({ historico, systemPrompt, empresa })
                 })
 
                 const iaData = await iaRes.json()

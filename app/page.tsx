@@ -1471,8 +1471,16 @@ export default function Home() {
 
                       {/* Gestão de equipe (atendentes) */}
                       <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: '24px', paddingTop: '20px' }}>
-                        <h3 style={{ fontSize: '13px', fontWeight: 700, marginBottom: '12px' }}>👥 Equipe de atendentes</h3>
 
+                        <h3 style={{ fontSize: '13px', fontWeight: 700, marginBottom: '8px' }}>👥 Equipe de atendentes</h3>
+                        <div style={{ background: 'rgba(255,107,0,0.04)', border: '1px solid rgba(255,107,0,0.15)', borderRadius: '10px', padding: '10px 12px', marginBottom: '14px' }}>
+                          <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>
+                            Compartilhe este link com cada atendente pra ele fazer login:
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#FF6B00', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                            flowsms.com.br/atendente
+                          </div>
+                        </div>
                         {atendenteErro && (
                           <div style={{ background: 'rgba(243,139,168,0.08)', border: '1px solid rgba(243,139,168,0.2)', color: '#f38ba8', padding: '8px 12px', borderRadius: '10px', fontSize: '12px', marginBottom: '12px' }}>
                             ⚠️ {atendenteErro}

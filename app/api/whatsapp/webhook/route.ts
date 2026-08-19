@@ -98,6 +98,16 @@ export async function POST(req: NextRequest) {
                 })
             })
 
+            // 2.5. Se for um lead novo, distribui automaticamente pra um atendente disponível
+            try {
+                await fetch(baseUrl + '/api/atendentes/distribuir', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telefone, empresa })
+                })
+            } catch (e) {
+                console.error('Erro ao distribuir lead:', e)
+            }
             // 3. Busca o histórico da conversa (já incluindo a mensagem que acabou de ser salva) e chama a IA com ele
             if (texto) {
                 const historico = await buscarHistoricoConversa(baseId!, tableId!, apiKey!, telefone, empresa)

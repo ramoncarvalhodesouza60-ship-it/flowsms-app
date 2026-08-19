@@ -320,6 +320,16 @@ export default function Home() {
   const [configSalvando, setConfigSalvando] = useState(false)
   const [configErro, setConfigErro] = useState('')
   const [configSucesso, setConfigSucesso] = useState(false)
+
+  // Estados da gestão de equipe (atendentes)
+  const [atendentesLista, setAtendentesLista] = useState<any[]>([])
+  const [atendentesCarregando, setAtendentesCarregando] = useState(false)
+  const [atendenteNome, setAtendenteNome] = useState('')
+  const [atendenteEmail, setAtendenteEmail] = useState('')
+  const [atendenteSenha, setAtendenteSenha] = useState('')
+  const [atendenteCapacidade, setAtendenteCapacidade] = useState('10')
+  const [atendenteSalvando, setAtendenteSalvando] = useState(false)
+  const [atendenteErro, setAtendenteErro] = useState('')
   async function entrar() {
     setLoading(true)
     try {
@@ -665,6 +675,58 @@ export default function Home() {
     setPerfilSalvando(false)
   }
 
+  async function carregarAtendentes() {
+    setAtendentesCarregando(true)
+    try {
+      const res = await fetch('/api/atendentes?empresa=' + encodeURIComponent(empresaAtual))
+      const data = await res.json()
+      if (data.success) setAtendentesLista(data.atendentes)
+    } catch (e) { console.error(e) }
+    setAtendentesCarregando(false)
+  }
+
+  async function criarAtendente() {
+    if (!atendenteNome.trim() || !atendenteEmail.trim() || !atendenteSenha.trim()) return
+    setAtendenteSalvando(true)
+    setAtendenteErro('')
+    try {
+      const res = await fetch('/api/atendentes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome: atendenteNome,
+          email: atendenteEmail,
+          senha: atendenteSenha,
+          empresa: empresaAtual,
+          capacidadeMaxima: atendenteCapacidade,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAtendenteNome(''); setAtendenteEmail(''); setAtendenteSenha(''); setAtendenteCapacidade('10')
+        carregarAtendentes()
+      } else {
+        setAtendenteErro(data.error || 'Erro ao salvar atendente')
+      }
+    } catch (e: any) {
+      setAtendenteErro('Erro de conexão: ' + e.message)
+    }
+    setAtendenteSalvando(false)
+  }
+
+  async function alternarAtivoAtendente(id: string, ativoAtual: boolean) {
+    await fetch('/api/atendentes', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, ativo: !ativoAtual }),
+    })
+    carregarAtendentes()
+  }
+
+  async function deletarAtendente(id: string) {
+    await fetch('/api/atendentes', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+    carregarAtendentes()
+  }
   async function carregarConfig() {
     setConfigCarregando(true)
     setConfigErro('')
@@ -708,6 +770,7 @@ export default function Home() {
   function abrirConfig() {
     setConfigAberta(true)
     carregarConfig()
+    carregarAtendentes()
   }
 
   async function deletarProduto(id: string) {
@@ -1405,6 +1468,44 @@ export default function Home() {
                       <button onClick={salvarConfig} disabled={configSalvando} style={{ width: '100%', padding: '13px', background: configSalvando ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg,#FF6B00,#ff8c33)', color: 'white', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: 700, cursor: configSalvando ? 'not-allowed' : 'pointer', fontFamily: 'Inter, sans-serif' }}>
                         {configSalvando ? 'Salvando...' : 'Salvar'}
                       </button>
+
+                      {/* Gestão de equipe (atendentes) */}
+                      <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: '24px', paddingTop: '20px' }}>
+                        <h3 style={{ fontSize: '13px', fontWeight: 700, marginBottom: '12px' }}>👥 Equipe de atendentes</h3>
+
+                        {atendenteErro && (
+                          <div style={{ background: 'rgba(243,139,168,0.08)', border: '1px solid rgba(243,139,168,0.2)', color: '#f38ba8', padding: '8px 12px', borderRadius: '10px', fontSize: '12px', marginBottom: '12px' }}>
+                            ⚠️ {atendenteErro}
+                          </div>
+                        )}
+
+                        {atendentesCarregando && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px', padding: '10px 0' }}>Carregando...</div>}
+
+                        {!atendentesCarregando && atendentesLista.map((a: any) => (
+                          <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', marginBottom: '6px' }}>
+                            <div>
+                              <div style={{ fontSize: '12px', color: 'white', fontWeight: 600 }}>{a.nome}</div>
+                              <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)' }}>{a.email} · até {a.capacidadeMaxima} conversas</div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                              <button onClick={() => alternarAtivoAtendente(a.id, a.ativo)} style={{ fontSize: '10px', padding: '4px 8px', borderRadius: '6px', border: 'none', cursor: 'pointer', background: a.ativo ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)', color: a.ativo ? '#22c55e' : 'rgba(255,255,255,0.3)', fontFamily: 'Inter, sans-serif' }}>
+                                {a.ativo ? 'Ativo' : 'Inativo'}
+                              </button>
+                              <button onClick={() => deletarAtendente(a.id)} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', fontSize: '12px' }}>✕</button>
+                            </div>
+                          </div>
+                        ))}
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '12px' }}>
+                          <input className="inp-focus" placeholder="Nome" value={atendenteNome} onChange={e => setAtendenteNome(e.target.value)} style={{ ...inp, padding: '10px 12px', fontSize: '12px' }} />
+                          <input className="inp-focus" placeholder="E-mail" value={atendenteEmail} onChange={e => setAtendenteEmail(e.target.value)} style={{ ...inp, padding: '10px 12px', fontSize: '12px' }} />
+                          <input className="inp-focus" type="password" placeholder="Senha" value={atendenteSenha} onChange={e => setAtendenteSenha(e.target.value)} style={{ ...inp, padding: '10px 12px', fontSize: '12px' }} />
+                          <input className="inp-focus" type="number" placeholder="Capacidade máx." value={atendenteCapacidade} onChange={e => setAtendenteCapacidade(e.target.value)} style={{ ...inp, padding: '10px 12px', fontSize: '12px' }} />
+                        </div>
+                        <button onClick={criarAtendente} disabled={atendenteSalvando} style={{ width: '100%', marginTop: '8px', padding: '10px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '10px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}>
+                          {atendenteSalvando ? 'Adicionando...' : '+ Adicionar atendente'}
+                        </button>
+                      </div>
                     </>
                   )}
                 </div>

@@ -98,6 +98,19 @@ export async function POST(req: NextRequest) {
                 })
             })
 
+            // 2.4. Verifica se essa conversa já está sendo atendida por um humano (atendimento_ativo + atendente_id)
+            let jaAtendidoPorHumano = false
+            try {
+                const contatoUrl = 'https://api.airtable.com/v0/' + baseId + '/Contato'
+                    + '?filterByFormula=' + encodeURIComponent('{Phone} = "' + telefone + '"')
+                const contatoRes = await fetch(contatoUrl, { headers: { Authorization: 'Bearer ' + apiKey } })
+                const contatoData = await contatoRes.json()
+                const registro = contatoData.records?.[0]?.fields
+                jaAtendidoPorHumano = !!(registro?.atendimento_ativo && registro?.atendente_id)
+            } catch (e) {
+                console.error('Erro ao checar status de atendimento:', e)
+            }
+
             // 2.5. Verifica se o cliente pediu explicitamente pra falar com um atendente humano
             let pediuHumano = false
             try {
@@ -120,8 +133,11 @@ export async function POST(req: NextRequest) {
                 console.error('Erro ao verificar pedido de atendente humano:', e)
             }
 
-            // 3. Se pediu humano, usa uma mensagem fixa (sem gastar IA). Senão, busca o histórico e chama a IA normalmente.
-            if (texto) {
+            // 3. Se já está com atendente humano (e não é o pedido de transferência agora), a IA não responde —
+            // deixa o atendente ver e responder manualmente pelo painel dele.
+            if (texto && jaAtendidoPorHumano && !pediuHumano) {
+                // Não faz nada — mensagem já foi salva no passo 2, atendente vê no painel dele
+            } else if (texto) {
                 let resposta: string
                 let imagemUrl: string | null = null
 

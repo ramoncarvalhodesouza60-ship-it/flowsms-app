@@ -99,6 +99,7 @@ export async function POST(req: NextRequest) {
             })
 
             // 2.5. Verifica se o cliente pediu explicitamente pra falar com um atendente humano
+            let pediuHumano = false
             try {
                 const humanoRes = await fetch(baseUrl + '/api/leads/detectar-humano', {
                     method: 'POST',
@@ -106,8 +107,9 @@ export async function POST(req: NextRequest) {
                     body: JSON.stringify({ mensagem: texto })
                 })
                 const humanoData = await humanoRes.json()
+                pediuHumano = !!humanoData?.quer_humano
 
-                if (humanoData?.quer_humano) {
+                if (pediuHumano) {
                     await fetch(baseUrl + '/api/atendentes/distribuir', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -117,19 +119,27 @@ export async function POST(req: NextRequest) {
             } catch (e) {
                 console.error('Erro ao verificar pedido de atendente humano:', e)
             }
-            // 3. Busca o histórico da conversa (já incluindo a mensagem que acabou de ser salva) e chama a IA com ele
+
+            // 3. Se pediu humano, usa uma mensagem fixa (sem gastar IA). Senão, busca o histórico e chama a IA normalmente.
             if (texto) {
-                const historico = await buscarHistoricoConversa(baseId!, tableId!, apiKey!, telefone, empresa)
+                let resposta: string
+                let imagemUrl: string | null = null
 
-                const iaRes = await fetch(baseUrl + '/api/whatsapp/ia', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ historico, systemPrompt, empresa })
-                })
+                if (pediuHumano) {
+                    resposta = 'Entendido! 😊 Já avisei nossa equipe e um atendente vai continuar seu atendimento em breve. Só um instante!'
+                } else {
+                    const historico = await buscarHistoricoConversa(baseId!, tableId!, apiKey!, telefone, empresa)
 
-                const iaData = await iaRes.json()
-                const resposta = iaData.resposta
-                const imagemUrl = iaData.imagemUrl
+                    const iaRes = await fetch(baseUrl + '/api/whatsapp/ia', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ historico, systemPrompt, empresa })
+                    })
+
+                    const iaData = await iaRes.json()
+                    resposta = iaData.resposta
+                    imagemUrl = iaData.imagemUrl
+                }
 
                 if (resposta) {
                     // 4. Envia resposta da IA via WhatsApp usando token e phone_number_id do cliente

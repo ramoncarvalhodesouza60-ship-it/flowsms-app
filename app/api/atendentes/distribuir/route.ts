@@ -32,8 +32,9 @@ export async function POST(request: Request) {
             )
         })
 
-        // Se já existe e já tem atendente, não faz nada — conversa em andamento não é redistribuída
-        if (contatoRecord && contatoRecord.get('atendente_id')) {
+        // Só bloqueia nova distribuição se o atendimento anterior AINDA estiver ativo
+        // (se foi finalizado, precisa poder atribuir de novo)
+        if (contatoRecord && contatoRecord.get('atendente_id') && contatoRecord.get('atendimento_ativo')) {
             return NextResponse.json({ success: true, ja_atribuido: true })
         }
 

@@ -133,6 +133,8 @@ export async function POST(req: NextRequest) {
                 console.error('Erro ao verificar pedido de atendente humano:', e)
             }
 
+            console.log('DEBUG ATENDIMENTO:', { jaAtendidoPorHumano, pediuHumano, telefone })
+
             // 3. Se já está com atendente humano (e não é o pedido de transferência agora), a IA não responde —
             // deixa o atendente ver e responder manualmente pelo painel dele.
             if (texto && jaAtendidoPorHumano && !pediuHumano) {

@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
 
             if (phoneNumberId) {
                 const clientesUrl = 'https://api.airtable.com/v0/' + baseId + '/' + clientesId
-                    + '?filterByFormula=' + encodeURIComponent('{phone_number_id}="' + phoneNumberId + '"')
+                    + '?filterByFormula=' + encodeURIComponent('AND({phone_number_id}="' + phoneNumberId + '", NOT({excluir_do_webhook}))')
 
                 const clientesRes = await fetch(clientesUrl, {
                     headers: { Authorization: 'Bearer ' + apiKey }

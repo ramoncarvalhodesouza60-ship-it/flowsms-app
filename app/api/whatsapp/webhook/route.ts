@@ -112,25 +112,29 @@ export async function POST(req: NextRequest) {
             }
 
             // 2.5. Verifica se o cliente pediu explicitamente pra falar com um atendente humano
+            // (só precisa checar se AINDA não está com atendente — depois de atribuído, fica sempre em silêncio,
+            // não importa o que o cliente escrever depois, até o atendente finalizar o atendimento)
             let pediuHumano = false
-            try {
-                const humanoRes = await fetch(baseUrl + '/api/leads/detectar-humano', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mensagem: texto })
-                })
-                const humanoData = await humanoRes.json()
-                pediuHumano = !!humanoData?.quer_humano
-
-                if (pediuHumano) {
-                    await fetch(baseUrl + '/api/atendentes/distribuir', {
+            if (!jaAtendidoPorHumano) {
+                try {
+                    const humanoRes = await fetch(baseUrl + '/api/leads/detectar-humano', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ telefone, empresa })
+                        body: JSON.stringify({ mensagem: texto })
                     })
+                    const humanoData = await humanoRes.json()
+                    pediuHumano = !!humanoData?.quer_humano
+
+                    if (pediuHumano) {
+                        await fetch(baseUrl + '/api/atendentes/distribuir', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ telefone, empresa })
+                        })
+                    }
+                } catch (e) {
+                    console.error('Erro ao verificar pedido de atendente humano:', e)
                 }
-            } catch (e) {
-                console.error('Erro ao verificar pedido de atendente humano:', e)
             }
 
             console.log('DEBUG ATENDIMENTO:', { jaAtendidoPorHumano, pediuHumano, telefone })

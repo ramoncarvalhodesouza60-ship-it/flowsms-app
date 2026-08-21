@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
             let jaAtendidoPorHumano = false
             try {
                 const contatoUrl = 'https://api.airtable.com/v0/' + baseId + '/Contato'
-                    + '?filterByFormula=' + encodeURIComponent('{Phone} = "' + telefone + '"')
+                    + '?filterByFormula=' + encodeURIComponent('OR({Phone} = "' + telefone + '", {Phone} = "+' + telefone + '")')
                 const contatoRes = await fetch(contatoUrl, { headers: { Authorization: 'Bearer ' + apiKey } })
                 const contatoData = await contatoRes.json()
                 const registro = contatoData.records?.[0]?.fields

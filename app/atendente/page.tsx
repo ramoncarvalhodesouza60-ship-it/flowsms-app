@@ -22,6 +22,23 @@ function hexParaRgba(hex: string, alpha: number): string {
     return `rgba(${r},${g},${b},${alpha})`
 }
 
+const tagsDisponiveis = [
+    { id: 'quente', label: 'Quente', cor: '#f38ba8', bg: 'rgba(243,139,168,0.15)' },
+    { id: 'frio', label: 'Frio', cor: '#74c7ec', bg: 'rgba(116,199,236,0.15)' },
+    { id: 'vip', label: 'VIP', cor: '#f9e2af', bg: 'rgba(249,226,175,0.15)' },
+    { id: 'urgente', label: 'Urgente', cor: '#FF6B00', bg: 'rgba(255,107,0,0.15)' },
+    { id: 'indicacao', label: 'Indicação', cor: '#a6e3a1', bg: 'rgba(166,227,161,0.15)' },
+]
+
+const respostasRapidas = [
+    { label: 'Saudação', texto: 'Olá! Tudo bem? Sou da equipe de atendimento. Como posso te ajudar hoje?' },
+    { label: 'Preço', texto: 'Ótima pergunta! Nossos valores variam conforme o produto. Pode me dizer qual te interessa?' },
+    { label: 'Aguarde', texto: 'Perfeito! Vou verificar essa informação para você agora mesmo. Um momento! 😊' },
+    { label: 'Agendamento', texto: 'Que tal agendarmos uma conversa? Me diga sua disponibilidade e combinamos!' },
+    { label: 'Obrigado', texto: 'Muito obrigado pelo contato! Qualquer dúvida estarei aqui para te ajudar. 🙏' },
+    { label: 'Fechamento', texto: 'Perfeito! Vou processar tudo agora. Você receberá a confirmação em breve!' },
+]
+
 type MensagemRaw = {
     id: string
     telefone: string
@@ -57,6 +74,9 @@ export default function AtendentePage() {
     const [conversaSelecionada, setConversaSelecionada] = useState<string | null>(null)
     const [novaMensagem, setNovaMensagem] = useState('')
     const [enviando, setEnviando] = useState(false)
+    const [mostrarRespostas, setMostrarRespostas] = useState(false)
+    const [mostrarTags, setMostrarTags] = useState(false)
+    const [tagsPorContato, setTagsPorContato] = useState<Record<string, string[]>>({})
     const mensagensEndRef = useRef<HTMLDivElement>(null)
 
     async function entrar() {
@@ -145,7 +165,7 @@ export default function AtendentePage() {
             await fetch('/api/contatos/etapa', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ telefone, etapa: novaEtapa }),
+                body: JSON.stringify({ telefone, etapa: novaEtapa, empresa: atendente.empresa }),
             })
         } catch (e) { console.error(e) }
     }
@@ -160,6 +180,14 @@ export default function AtendentePage() {
             await carregarConversas()
             setConversaSelecionada(null)
         } catch (e) { console.error(e) }
+    }
+
+    function toggleTag(telefone: string, tagId: string) {
+        setTagsPorContato(prev => {
+            const atual = prev[telefone] || []
+            const novas = atual.includes(tagId) ? atual.filter(t => t !== tagId) : [...atual, tagId]
+            return { ...prev, [telefone]: novas }
+        })
     }
 
     // Agrupa as mensagens em lista de contatos únicos
@@ -188,6 +216,7 @@ export default function AtendentePage() {
         : []
 
     const contatoAtual = conversaSelecionada ? contatosMap.get(conversaSelecionada) : null
+    const tagsAtual = conversaSelecionada ? (tagsPorContato[conversaSelecionada] || []) : []
 
     // ==================== LOGIN ====================
     if (!atendente) {
@@ -316,10 +345,37 @@ export default function AtendentePage() {
                                         <div style={{ color: 'white', fontSize: '14px', fontWeight: 600 }}>{contatoAtual.nome || 'Sem cadastro'}</div>
                                         <div style={{ color: '#555', fontSize: '11px' }}>{conversaSelecionada}</div>
                                     </div>
-                                    <button onClick={() => finalizarAtendimento(conversaSelecionada)} style={{ background: 'rgba(243,139,168,0.1)', border: '1px solid rgba(243,139,168,0.3)', color: '#f38ba8', padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'Inter, sans-serif' }}>
-                                        Finalizar atendimento
-                                    </button>
+                                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                        <button onClick={() => { setMostrarTags(!mostrarTags); setMostrarRespostas(false) }}
+                                            style={{
+                                                background: mostrarTags ? 'rgba(255,107,0,0.2)' : '#1a1a1a',
+                                                border: `1px solid ${mostrarTags ? 'rgba(255,107,0,0.4)' : '#2a2a2a'}`,
+                                                color: mostrarTags ? '#FF6B00' : '#aaa',
+                                                padding: '7px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'Inter, sans-serif'
+                                            }}>
+                                            🏷️ Tags
+                                        </button>
+                                        <button onClick={() => finalizarAtendimento(conversaSelecionada)} style={{ background: 'rgba(243,139,168,0.1)', border: '1px solid rgba(243,139,168,0.3)', color: '#f38ba8', padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'Inter, sans-serif' }}>
+                                            Finalizar atendimento
+                                        </button>
+                                    </div>
                                 </div>
+
+                                {/* PAINEL TAGS */}
+                                {mostrarTags && (
+                                    <div style={{ padding: '10px 20px', background: '#0f0f0f', borderBottom: '1px solid #1e1e1e', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', flexShrink: 0 }}>
+                                        <span style={{ color: '#555', fontSize: '11px', marginRight: '4px' }}>Tags:</span>
+                                        {tagsDisponiveis.map(tag => {
+                                            const ativa = tagsAtual.includes(tag.id)
+                                            return (
+                                                <button key={tag.id} onClick={() => toggleTag(conversaSelecionada, tag.id)}
+                                                    style={{ background: ativa ? tag.bg : 'transparent', border: `1px solid ${ativa ? tag.cor : '#2a2a2a'}`, color: ativa ? tag.cor : '#555', padding: '4px 10px', borderRadius: '20px', cursor: 'pointer', fontSize: '11px', fontWeight: 600, fontFamily: 'Inter, sans-serif' }}>
+                                                    {ativa ? '✓ ' : ''}{tag.label}
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+                                )}
 
                                 <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px', background: '#0d0d0d' }}>
                                     {msgAtual.map(msg => (
@@ -339,19 +395,40 @@ export default function AtendentePage() {
                                     <div ref={mensagensEndRef} />
                                 </div>
 
-                                <div style={{ padding: '14px 20px', background: '#111', borderTop: '1px solid #1e1e1e', display: 'flex', gap: '8px', flexShrink: 0 }}>
-                                    <input
-                                        placeholder={enviando ? 'Enviando...' : 'Digite uma mensagem...'}
-                                        value={novaMensagem}
-                                        disabled={enviando}
-                                        onChange={e => setNovaMensagem(e.target.value)}
-                                        onKeyDown={e => e.key === 'Enter' && enviarMensagem()}
-                                        style={{ flex: 1, padding: '11px 16px', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '24px', color: 'white', fontSize: '13px', outline: 'none', fontFamily: 'Inter, sans-serif' }}
-                                    />
-                                    <button onClick={enviarMensagem} disabled={enviando}
-                                        style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#FF6B00', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0, opacity: enviando ? 0.6 : 1 }}>
-                                        ➤
-                                    </button>
+                                {/* INPUT */}
+                                <div style={{ background: '#111', borderTop: '1px solid #1e1e1e', flexShrink: 0 }}>
+
+                                    {/* Respostas rápidas */}
+                                    {mostrarRespostas && (
+                                        <div style={{ padding: '10px 20px', borderBottom: '1px solid #1e1e1e', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                            {respostasRapidas.map((r, i) => (
+                                                <button key={i} onClick={() => { setNovaMensagem(r.texto); setMostrarRespostas(false) }}
+                                                    style={{ background: 'rgba(255,107,0,0.1)', border: '1px solid rgba(255,107,0,0.25)', color: '#FF6B00', padding: '5px 12px', borderRadius: '20px', cursor: 'pointer', fontSize: '11px', fontWeight: 600, fontFamily: 'Inter, sans-serif' }}>
+                                                    ⚡ {r.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <div style={{ padding: '14px 20px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        {/* Botão Respostas Rápidas */}
+                                        <button onClick={() => { setMostrarRespostas(!mostrarRespostas); setMostrarTags(false) }}
+                                            style={{ width: '36px', height: '36px', borderRadius: '50%', background: mostrarRespostas ? '#FF6B00' : '#1a1a1a', border: '1px solid #2a2a2a', color: mostrarRespostas ? 'white' : '#555', cursor: 'pointer', fontSize: '14px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            ⚡
+                                        </button>
+                                        <input
+                                            placeholder={enviando ? 'Enviando...' : 'Digite uma mensagem...'}
+                                            value={novaMensagem}
+                                            disabled={enviando}
+                                            onChange={e => setNovaMensagem(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && enviarMensagem()}
+                                            style={{ flex: 1, padding: '11px 16px', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '24px', color: 'white', fontSize: '13px', outline: 'none', fontFamily: 'Inter, sans-serif' }}
+                                        />
+                                        <button onClick={enviarMensagem} disabled={enviando}
+                                            style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#FF6B00', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0, opacity: enviando ? 0.6 : 1 }}>
+                                            ➤
+                                        </button>
+                                    </div>
                                 </div>
                             </>
                         )}
@@ -372,17 +449,28 @@ export default function AtendentePage() {
                                     <span style={{ color: col.cor, fontSize: '12px', fontWeight: 700, textTransform: 'uppercase' }}>{col.label}</span>
                                     <span style={{ background: borda, color: col.cor, borderRadius: '12px', padding: '2px 8px', fontSize: '11px', fontWeight: 700 }}>{cards.length}</span>
                                 </div>
-                                {cards.map(c => (
-                                    <div key={c.telefone} onClick={() => { setConversaSelecionada(c.telefone); setView('conversas') }}
-                                        style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: '10px', padding: '12px', cursor: 'pointer' }}>
-                                        <div style={{ color: c.nome ? 'white' : '#999', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>{c.nome || c.telefone}</div>
-                                        <div style={{ color: '#666', fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '8px' }}>{c.ultimaMensagem}</div>
-                                        <select value={c.etapa} onChange={e => { e.stopPropagation(); moverEtapa(c.telefone, e.target.value) }} onClick={e => e.stopPropagation()}
-                                            style={{ width: '100%', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '6px', color: 'white', padding: '5px 8px', fontSize: '11px', cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}>
-                                            {colunas.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
-                                        </select>
-                                    </div>
-                                ))}
+                                {cards.map(c => {
+                                    const tags = tagsPorContato[c.telefone] || []
+                                    return (
+                                        <div key={c.telefone} onClick={() => { setConversaSelecionada(c.telefone); setView('conversas') }}
+                                            style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: '10px', padding: '12px', cursor: 'pointer' }}>
+                                            <div style={{ color: c.nome ? 'white' : '#999', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>{c.nome || c.telefone}</div>
+                                            <div style={{ color: '#666', fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '8px' }}>{c.ultimaMensagem}</div>
+                                            {tags.length > 0 && (
+                                                <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                                                    {tags.map(tagId => {
+                                                        const tag = tagsDisponiveis.find(t => t.id === tagId)
+                                                        return tag ? <span key={tagId} style={{ fontSize: '8px', color: tag.cor, background: tag.bg, padding: '1px 5px', borderRadius: '8px', fontWeight: 600 }}>{tag.label}</span> : null
+                                                    })}
+                                                </div>
+                                            )}
+                                            <select value={c.etapa} onChange={e => { e.stopPropagation(); moverEtapa(c.telefone, e.target.value) }} onClick={e => e.stopPropagation()}
+                                                style={{ width: '100%', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '6px', color: 'white', padding: '5px 8px', fontSize: '11px', cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}>
+                                                {colunas.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
+                                            </select>
+                                        </div>
+                                    )
+                                })}
                                 {cards.length === 0 && <div style={{ color: '#333', fontSize: '12px', textAlign: 'center', padding: '20px 0' }}>Nenhum lead</div>}
                             </div>
                         )

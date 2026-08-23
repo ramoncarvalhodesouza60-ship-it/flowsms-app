@@ -9,7 +9,7 @@ function normalizarTelefone(tel: string) {
 
 export async function POST(req: NextRequest) {
     try {
-        const { telefone, etapa } = await req.json()
+        const { telefone, etapa, empresa } = await req.json()
 
         if (!telefone || !etapa) {
             return NextResponse.json({ success: false, error: 'telefone e etapa são obrigatorios' }, { status: 400 })
@@ -34,17 +34,73 @@ export async function POST(req: NextRequest) {
             )
         })
 
+        let contatoId: string
         if (records.length === 0) {
             // Contato nao existe ainda — cria com telefone e etapa
-            await base('Contato').create({
+            const novoRecord = await base('Contato').create({
                 'Phone': telefone,
                 'etapa': etapa,
             })
-            return NextResponse.json({ success: true, criado: true })
+            contatoId = novoRecord.id
+        } else {
+            // Atualiza a etapa do contato existente
+            await base('Contato').update(records[0].id, { etapa: etapa })
+            contatoId = records[0].id
         }
 
-        // Atualiza a etapa do contato existente
-        await base('Contato').update(records[0].id, { etapa: etapa })
+        // Verifica se a nova etapa está marcada como "conversão" pra essa empresa
+        if (empresa) {
+            let colunas: any[] = []
+            let whatsappToken: string | null = null
+            let phoneNumberId: string | null = null
+
+            await new Promise<void>((resolve, reject) => {
+                const formula = '{empresa} = "' + empresa + '"'
+                base('Clientes').select({ filterByFormula: formula, maxRecords: 1 }).eachPage(
+                    (pageRecords: any[], fetchNextPage: () => void) => {
+                        pageRecords.forEach((record: any) => {
+                            const bruto = record.get('kanban_colunas')
+                            if (bruto) {
+                                try { colunas = JSON.parse(bruto) } catch { }
+                            }
+                            whatsappToken = record.get('whatsapp_token') || null
+                            phoneNumberId = record.get('phone_number_id') || null
+                        })
+                        fetchNextPage()
+                    },
+                    (err: any) => { if (err) reject(err); else resolve() }
+                )
+            })
+
+            const colunaAtual = colunas.find((c: any) => c.id === etapa)
+
+            if (colunaAtual?.ehConversao) {
+                // 1. Libera a vaga do atendente
+                await base('Contato').update(contatoId, { atendimento_ativo: false })
+
+                // 2. Manda a mensagem de agradecimento (personalizada ou padrão)
+                if (whatsappToken && phoneNumberId) {
+                    const mensagem = colunaAtual.mensagemConversao?.trim() ||
+                        'Muito obrigado pela confiança! 😊 Foi um prazer atender você. Qualquer coisa, estamos por aqui!'
+
+                    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://flowsms.com.br'
+                    try {
+                        await fetch(baseUrl + '/api/whatsapp/send', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                telefone,
+                                mensagem,
+                                token: whatsappToken,
+                                phoneNumberId: phoneNumberId,
+                            }),
+                        })
+                    } catch (e) {
+                        console.error('Erro ao enviar mensagem de conversão:', e)
+                    }
+                }
+            }
+        }
 
         return NextResponse.json({ success: true })
     } catch (error: any) {

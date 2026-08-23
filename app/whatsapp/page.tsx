@@ -223,6 +223,21 @@ function WhatsAppConteudo() {
         salvarColunas(lista)
     }
 
+    // Liga/desliga a coluna como etapa de "conversão" (libera atendente + manda agradecimento automático)
+    function toggleConversaoColuna(id: string) {
+        salvarColunas(colunas.map((c: any) => c.id === id ? { ...c, ehConversao: !c.ehConversao } : c))
+    }
+
+    // Atualiza a mensagem de agradecimento personalizada dessa coluna de conversão (localmente, salva no blur)
+    function mudarMensagemConversao(id: string, texto: string) {
+        setColunas(prev => prev.map((c: any) => c.id === id ? { ...c, mensagemConversao: texto } : c) as typeof colunasPadrao)
+    }
+
+    // Salva a mensagem de conversão no Airtable só quando o campo perde o foco (evita salvar a cada letra digitada)
+    function salvarMensagemConversao() {
+        salvarColunas(colunas)
+    }
+
     async function carregarMensagens() {
         try {
             setCarregando(true)
@@ -472,7 +487,7 @@ function WhatsAppConteudo() {
             await fetch('/api/contatos/etapa', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ telefone, etapa: novaEtapa }),
+                body: JSON.stringify({ telefone, etapa: novaEtapa, empresa: empresaAtual }),
             })
         } catch (e) {
             console.error('Erro ao salvar etapa no Airtable:', e)
@@ -1097,7 +1112,7 @@ function WhatsAppConteudo() {
                         </button>
                     </div>
                     <div style={{ flex: 1, overflowX: 'auto', padding: '16px 24px 24px', display: 'flex', gap: '16px' }}>
-                        {colunas.map(col => {
+                        {colunas.map((col: any) => {
                             const cards = contatos.filter(c => c.etapa === col.id)
                             const bg = hexParaRgba(col.cor, 0.08)
                             const borda = hexParaRgba(col.cor, 0.2)
@@ -1131,6 +1146,28 @@ function WhatsAppConteudo() {
                                             <span style={{ background: borda, color: col.cor, borderRadius: '12px', padding: '2px 8px', fontSize: '11px', fontWeight: 700 }}>{cards.length}</span>
                                         )}
                                     </div>
+
+                                    {/* Marcar como conversão + mensagem personalizada (só no modo edição) */}
+                                    {editandoColunas && (
+                                        <div style={{ background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: col.ehConversao ? '#22c55e' : '#888', cursor: 'pointer', fontWeight: 600 }}>
+                                                <input type="checkbox" checked={!!col.ehConversao} onChange={() => toggleConversaoColuna(col.id)}
+                                                    style={{ cursor: 'pointer' }} />
+                                                Marcar como conversão
+                                            </label>
+                                            {col.ehConversao && (
+                                                <textarea
+                                                    value={col.mensagemConversao || ''}
+                                                    onChange={e => mudarMensagemConversao(col.id, e.target.value)}
+                                                    onBlur={salvarMensagemConversao}
+                                                    placeholder="Mensagem de agradecimento (opcional — deixe vazio para usar a padrão)"
+                                                    rows={2}
+                                                    style={{ width: '100%', background: '#0d0d0d', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#ccc', fontSize: '11px', padding: '6px 8px', outline: 'none', fontFamily: 'Arial', resize: 'vertical', boxSizing: 'border-box' }}
+                                                />
+                                            )}
+                                        </div>
+                                    )}
+
                                     {cards.map(c => {
                                         const tags = tagsPorContato[c.id] || []
                                         return (
@@ -1183,25 +1220,3 @@ function WhatsAppConteudo() {
         </div>
     )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

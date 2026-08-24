@@ -387,7 +387,7 @@ function WhatsAppConteudo() {
                 body: JSON.stringify({ telefone: conversaSelecionada.telefone, mensagem: texto, tipo: 'enviada', empresa: empresaAtual }),
             })
 
-            await carregarMensagens()
+            await carregarMensagens(true)
         } catch (e) {
             setErro('Falha ao enviar mensagem.')
         } finally {
@@ -434,7 +434,7 @@ function WhatsAppConteudo() {
                 body: JSON.stringify({ telefone: conversaSelecionada.telefone, mensagem: '[' + tipoLabel + '] ' + urlPublica, tipo: 'enviada', empresa: empresaAtual }),
             })
 
-            await carregarMensagens()
+            await carregarMensagens(true)
         } catch (e: any) {
             setErro('Falha ao enviar mídia: ' + e.message)
         } finally {
@@ -478,7 +478,7 @@ function WhatsAppConteudo() {
                             body: JSON.stringify({ telefone: conversaSelecionada.telefone, mensagem: '[audio] ' + urlPublica, tipo: 'enviada', empresa: empresaAtual }),
                         })
 
-                        await carregarMensagens()
+                        await carregarMensagens(true)
                     } catch (e: any) {
                         setErro('Falha ao enviar áudio: ' + e.message)
                     } finally {
@@ -504,7 +504,7 @@ function WhatsAppConteudo() {
             })
             setMostrarCadastro(false)
             setNomeParaCadastro('')
-            await carregarMensagens()
+            await carregarMensagens(true)
         } catch {
             setErro('Falha ao cadastrar contato.')
         } finally {

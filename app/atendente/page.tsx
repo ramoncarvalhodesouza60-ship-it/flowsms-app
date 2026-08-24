@@ -172,7 +172,7 @@ export default function AtendentePage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ telefone: conversaSelecionada, mensagem: texto, tipo: 'enviada', empresa: atendente.empresa }),
             })
-            await carregarConversas()
+            await carregarConversas(true)
         } catch (e) {
             console.error(e)
         }

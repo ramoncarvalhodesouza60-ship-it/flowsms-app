@@ -120,6 +120,26 @@ export default function AtendentePage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [atendente])
 
+    // Atualiza as conversas automaticamente a cada 8 segundos, sem precisar apertar F5
+    useEffect(() => {
+        if (!atendente) return
+        const intervalo = setInterval(() => {
+            carregarConversas()
+        }, 8000)
+        return () => clearInterval(intervalo)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [atendente])
+
+    useEffect(() => {
+        if (atendente) {
+            fetch('/api/contatos/tags?empresa=' + encodeURIComponent(atendente.empresa))
+                .then(r => r.json())
+                .then(data => { if (data.success) setTagsPorContato(data.tags) })
+                .catch(e => console.error('Erro ao carregar tags:', e))
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [atendente])
+
     useEffect(() => {
         mensagensEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [mensagensRaw, conversaSelecionada])
@@ -186,6 +206,13 @@ export default function AtendentePage() {
         setTagsPorContato(prev => {
             const atual = prev[telefone] || []
             const novas = atual.includes(tagId) ? atual.filter(t => t !== tagId) : [...atual, tagId]
+
+            fetch('/api/contatos/tags', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telefone, tags: novas }),
+            }).catch(e => console.error('Erro ao salvar tags:', e))
+
             return { ...prev, [telefone]: novas }
         })
     }

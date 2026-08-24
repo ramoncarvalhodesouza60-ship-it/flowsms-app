@@ -297,6 +297,16 @@ function WhatsAppConteudo() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [empresaAtual])
 
+    // Atualiza as conversas automaticamente a cada 8 segundos, sem precisar apertar F5
+    useEffect(() => {
+        if (!empresaAtual) return
+        const intervalo = setInterval(() => {
+            carregarMensagens()
+        }, 8000)
+        return () => clearInterval(intervalo)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [empresaAtual])
+
 
     useEffect(() => {
         if (empresaAtual) carregarColunas()
@@ -319,6 +329,16 @@ function WhatsAppConteudo() {
     useEffect(() => {
         mensagensEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [mensagensRaw])
+
+    useEffect(() => {
+        if (empresaAtual) {
+            fetch('/api/contatos/tags?empresa=' + encodeURIComponent(empresaAtual))
+                .then(r => r.json())
+                .then(data => { if (data.success) setTagsPorContato(data.tags) })
+                .catch(e => console.error('Erro ao carregar tags:', e))
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [empresaAtual])
 
     async function enviarMensagem() {
         if (!novaMensagem.trim() || !conversaSelecionada) return
@@ -498,6 +518,13 @@ function WhatsAppConteudo() {
         setTagsPorContato(prev => {
             const atual = prev[contatoId] || []
             const novas = atual.includes(tagId) ? atual.filter(t => t !== tagId) : [...atual, tagId]
+
+            fetch('/api/contatos/tags', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telefone: contatoId, tags: novas }),
+            }).catch(e => console.error('Erro ao salvar tags:', e))
+
             return { ...prev, [contatoId]: novas }
         })
     }

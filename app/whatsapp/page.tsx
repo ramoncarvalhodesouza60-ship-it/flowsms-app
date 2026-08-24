@@ -279,11 +279,29 @@ function WhatsAppConteudo() {
                 })
             })
 
-            novosContatos.sort((a, b) => (a.horario < b.horario ? 1 : -1))
-
-            setContatos(novosContatos)
-            if (novosContatos.length > 0 && !conversaSelecionada) {
-                setConversaSelecionada(novosContatos[0])
+            if (!silencioso) {
+                // Primeira carga: ordena normalmente, mais recente no topo
+                novosContatos.sort((a, b) => (a.horario < b.horario ? 1 : -1))
+                setContatos(novosContatos)
+                if (novosContatos.length > 0 && !conversaSelecionada) {
+                    setConversaSelecionada(novosContatos[0])
+                }
+            } else {
+                // Atualização automática: NÃO reordena a lista (igual ao WhatsApp real) —
+                // só atualiza os dados de cada contato existente e adiciona os novos no topo
+                const mapaNovos = new Map(novosContatos.map(c => [c.id, c]))
+                setContatos(prev => {
+                    const idsAntigos = new Set(prev.map(c => c.id))
+                    const atualizados = prev.map(c => mapaNovos.get(c.id) || c)
+                    const novosDeVerdade = novosContatos.filter(c => !idsAntigos.has(c.id))
+                    return [...novosDeVerdade, ...atualizados]
+                })
+                // Atualiza a conversa aberta (se houver) sem trocar a seleção
+                setConversaSelecionada(prev => {
+                    if (!prev) return prev
+                    const atualizado = mapaNovos.get(prev.id)
+                    return atualizado ? { ...prev, ultimaMensagem: atualizado.ultimaMensagem, horario: atualizado.horario, status: atualizado.status, etapa: atualizado.etapa, nome: atualizado.nome, temNome: atualizado.temNome } : prev
+                })
             }
             if (!silencioso) setCarregando(false)
         } catch (e: any) {

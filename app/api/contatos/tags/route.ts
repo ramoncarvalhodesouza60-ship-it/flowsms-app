@@ -24,16 +24,13 @@ async function buscarRegistroContato(telefone: string) {
     return record
 }
 
-// GET /api/contatos/tags?empresa=XXX -> devolve um mapa { telefoneNormalizado: ["quente","vip"] } com todos os contatos da empresa
+// GET /api/contatos/tags?empresa=XXX -> devolve um mapa { telefoneNormalizado: ["quente","vip"] } com todos os contatos
 export async function GET(request: NextRequest) {
     try {
-        const empresa = request.nextUrl.searchParams.get('empresa') || ''
         const mapa: Record<string, string[]> = {}
 
         await new Promise<void>((resolve, reject) => {
-            const opcoes: any = { maxRecords: 1000 }
-            if (empresa) opcoes.filterByFormula = '{empresa} = "' + empresa + '"'
-            base('Contato').select(opcoes).eachPage(
+            base('Contato').select({ maxRecords: 1000 }).eachPage(
                 (pageRecords: any[], fetchNextPage: () => void) => {
                     pageRecords.forEach((record: any) => {
                         const telefone = record.get('Phone')

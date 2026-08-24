@@ -238,15 +238,15 @@ function WhatsAppConteudo() {
         salvarColunas(colunas)
     }
 
-    async function carregarMensagens() {
+    async function carregarMensagens(silencioso = false) {
         try {
-            setCarregando(true)
+            if (!silencioso) setCarregando(true)
             setErro(null)
             const res = await fetch('/api/whatsapp/mensagens?empresa=' + encodeURIComponent(empresaAtual))
             const data = await res.json()
             if (!Array.isArray(data)) {
                 setErro('Não foi possível carregar as mensagens.')
-                setCarregando(false)
+                if (!silencioso) setCarregando(false)
                 return
             }
             setMensagensRaw(data)
@@ -285,10 +285,10 @@ function WhatsAppConteudo() {
             if (novosContatos.length > 0 && !conversaSelecionada) {
                 setConversaSelecionada(novosContatos[0])
             }
-            setCarregando(false)
+            if (!silencioso) setCarregando(false)
         } catch (e: any) {
             setErro('Erro ao carregar mensagens: ' + e.message)
-            setCarregando(false)
+            if (!silencioso) setCarregando(false)
         }
     }
 
@@ -297,11 +297,11 @@ function WhatsAppConteudo() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [empresaAtual])
 
-    // Atualiza as conversas automaticamente a cada 8 segundos, sem precisar apertar F5
+    // Atualiza as conversas automaticamente a cada 8 segundos, em segundo plano, sem travar a tela nem tirar você de onde está mexendo
     useEffect(() => {
         if (!empresaAtual) return
         const intervalo = setInterval(() => {
-            carregarMensagens()
+            carregarMensagens(true)
         }, 8000)
         return () => clearInterval(intervalo)
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -723,7 +723,7 @@ function WhatsAppConteudo() {
                     {erro && <span style={{ color: '#f38ba8', fontSize: '11px' }}>{erro}</span>}
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <button onClick={carregarMensagens} style={btnStyle()}>🔄 Atualizar</button>
+                    <button onClick={() => carregarMensagens()} style={btnStyle()}>🔄 Atualizar</button>
                     <div style={{ display: 'flex', background: '#1a1a1a', borderRadius: '8px', padding: '3px', gap: '2px' }}>
                         <button onClick={() => setView('conversas')} style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 600, background: view === 'conversas' ? '#FF6B00' : 'transparent', color: view === 'conversas' ? 'white' : '#555', fontFamily: 'Arial' }}>
                             💬 Conversas

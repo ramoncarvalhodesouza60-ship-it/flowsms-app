@@ -101,9 +101,9 @@ export default function AtendentePage() {
         setLoadingLogin(false)
     }
 
-    async function carregarConversas() {
+    async function carregarConversas(silencioso = false) {
         if (!atendente) return
-        setCarregando(true)
+        if (!silencioso) setCarregando(true)
         try {
             const res = await fetch('/api/atendentes/conversas?atendenteId=' + atendente.id)
             const data = await res.json()
@@ -112,7 +112,7 @@ export default function AtendentePage() {
                 setColunas(data.colunas)
             }
         } catch (e) { console.error(e) }
-        setCarregando(false)
+        if (!silencioso) setCarregando(false)
     }
 
     useEffect(() => {
@@ -120,11 +120,11 @@ export default function AtendentePage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [atendente])
 
-    // Atualiza as conversas automaticamente a cada 8 segundos, sem precisar apertar F5
+    // Atualiza as conversas automaticamente a cada 8 segundos, em segundo plano, sem travar a tela nem tirar você de onde está mexendo
     useEffect(() => {
         if (!atendente) return
         const intervalo = setInterval(() => {
-            carregarConversas()
+            carregarConversas(true)
         }, 8000)
         return () => clearInterval(intervalo)
         // eslint-disable-next-line react-hooks/exhaustive-deps

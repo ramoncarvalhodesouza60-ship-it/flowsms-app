@@ -74,6 +74,18 @@ export async function POST(req: NextRequest) {
 
             const colunaAtual = colunas.find((c: any) => c.id === etapa)
 
+            console.log('DEBUG ETAPA:', {
+                telefoneRecebido: telefone,
+                etapaRecebida: etapa,
+                empresaRecebida: empresa,
+                quantidadeColunasEncontradas: colunas.length,
+                idsDasColunas: colunas.map((c: any) => c.id),
+                colunaAtualEncontrada: !!colunaAtual,
+                ehConversao: colunaAtual?.ehConversao,
+                temWhatsappToken: !!whatsappToken,
+                temPhoneNumberId: !!phoneNumberId,
+            })
+
             if (colunaAtual?.ehConversao) {
                 // 1. Libera a vaga do atendente
                 await base('Contato').update(contatoId, { atendimento_ativo: false })
@@ -98,6 +110,8 @@ export async function POST(req: NextRequest) {
                     } catch (e) {
                         console.error('Erro ao enviar mensagem de conversão:', e)
                     }
+                } else {
+                    console.log('DEBUG ETAPA: era conversão mas faltou whatsappToken ou phoneNumberId, não enviou mensagem')
                 }
             }
         }

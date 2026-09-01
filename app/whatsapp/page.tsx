@@ -1263,6 +1263,7 @@ function WhatsAppConteudo() {
                     </div>
                 </div>
             )}
+            <JarvasWidget empresa={empresaAtual} emailCliente="" />
         </div>
     )
 }

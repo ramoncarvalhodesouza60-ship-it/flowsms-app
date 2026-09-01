@@ -1,6 +1,7 @@
 'use client'
 import { useState, useRef, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
+import JarvasWidget from '@/components/JarvasWidget'
 
 const tagsDisponiveis = [
     { id: 'quente', label: 'Quente', cor: '#f38ba8', bg: 'rgba(243,139,168,0.15)' },

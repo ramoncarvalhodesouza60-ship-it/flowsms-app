@@ -1263,7 +1263,9 @@ function WhatsAppConteudo() {
                     </div>
                 </div>
             )}
-            <JarvasWidget empresa={empresaAtual} emailCliente="" />
+            {empresaAtual !== 'FlowSMS Admin' && (
+                <JarvasWidget empresa={empresaAtual} emailCliente="" />
+            )}
         </div>
     )
 }

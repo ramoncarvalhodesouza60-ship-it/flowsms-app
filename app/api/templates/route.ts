@@ -1,10 +1,17 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { verificarToken } from '@/lib/auth'
 
-// Lista os templates de mensagem cadastrados na Meta pro cliente
-// IMPORTANTE: precisa do campo whatsapp_business_account_id salvo no registro do cliente no Airtable
-// (é diferente do phone_number_id que já usamos hoje pro envio de mensagens)
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
+        const cookie = request.cookies.get('sessao')
+        if (!cookie) {
+            return NextResponse.json({ success: false, error: 'Não autenticado' }, { status: 401 })
+        }
+        const sessao = await verificarToken(cookie.value)
+        if (!sessao) {
+            return NextResponse.json({ success: false, error: 'Sessão inválida' }, { status: 401 })
+        }
+
         const { searchParams } = new URL(request.url)
         const wabaId = searchParams.get('wabaId')
         const token = searchParams.get('token')

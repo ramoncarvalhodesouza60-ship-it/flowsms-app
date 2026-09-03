@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { verificarRateLimit, obterIP } from '@/lib/rateLimit'
+import { criarToken } from '@/lib/auth'
+import bcrypt from 'bcryptjs'
 
 const Airtable = require('airtable')
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
@@ -7,7 +9,7 @@ const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process
 export async function POST(request: Request) {
     try {
         const ip = obterIP(request)
-        const rate = verificarRateLimit(ip, 'login', 5, 5 * 60 * 1000) // 5 tentativas a cada 5 minutos
+        const rate = verificarRateLimit(ip, 'login', 5, 5 * 60 * 1000)
 
         if (!rate.permitido) {
             return NextResponse.json(
@@ -22,14 +24,15 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'Email e senha são obrigatórios' }, { status: 400 })
         }
 
-        let clienteEncontrado: any = null
+        let registroEncontrado: any = null
 
         await new Promise<void>((resolve, reject) => {
-            const formula = 'AND({email} = "' + email + '", {senha} = "' + senha + '", {ativo} = TRUE())'
+            const formula = 'AND({email} = "' + email + '", {ativo} = TRUE())'
             base('Clientes').select({ filterByFormula: formula, maxRecords: 1 }).eachPage(
                 (pageRecords: any[], fetchNextPage: () => void) => {
                     pageRecords.forEach((record: any) => {
-                        clienteEncontrado = {
+                        registroEncontrado = {
+                            senhaSalva: record.get('senha'),
                             email: record.get('email'),
                             empresa: record.get('empresa'),
                             whatsapp: !!record.get('whatsapp_token'),
@@ -45,11 +48,45 @@ export async function POST(request: Request) {
             )
         })
 
-        if (clienteEncontrado) {
-            return NextResponse.json({ success: true, cliente: clienteEncontrado })
+        if (!registroEncontrado) {
+            return NextResponse.json({ success: false, error: 'Email ou senha incorretos' })
         }
 
-        return NextResponse.json({ success: false, error: 'Email ou senha incorretos' })
+        const senhaSalva: string = registroEncontrado.senhaSalva || ''
+        const jaEstaComHash = senhaSalva.startsWith('$2a$') || senhaSalva.startsWith('$2b$') || senhaSalva.startsWith('$2y$')
+
+        let senhaCorreta = false
+        if (jaEstaComHash) {
+            senhaCorreta = await bcrypt.compare(senha, senhaSalva)
+        } else {
+            senhaCorreta = senha === senhaSalva
+        }
+
+        if (!senhaCorreta) {
+            return NextResponse.json({ success: false, error: 'Email ou senha incorretos' })
+        }
+
+        const { senhaSalva: _omitir, ...clienteEncontrado } = registroEncontrado
+
+        // Gera o token de sessão e grava no cookie seguro
+        const ehAdmin = clienteEncontrado.empresa === 'FlowSMS Admin'
+        const token = await criarToken({
+            email: clienteEncontrado.email,
+            empresa: clienteEncontrado.empresa,
+            admin: ehAdmin,
+        })
+
+        const resposta = NextResponse.json({ success: true, cliente: clienteEncontrado })
+
+        resposta.cookies.set('sessao', token, {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'lax',
+            maxAge: 60 * 60 * 24 * 7, // 7 dias, em segundos
+            path: '/',
+        })
+
+        return resposta
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validarSessaoEEmpresa } from '@/lib/auth'
 
 const Airtable = require('airtable')
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
@@ -10,6 +11,9 @@ function normalizarTelefone(tel: string) {
 export async function GET(request: NextRequest) {
     try {
         const empresa = request.nextUrl.searchParams.get('empresa') || ''
+
+        const erro = await validarSessaoEEmpresa(request, empresa)
+        if (erro) return erro
 
         // 1. Busca mensagens
         const records: any[] = []
@@ -87,6 +91,10 @@ export async function POST(request: NextRequest) {
         if (!telefone || !mensagem || !tipo) {
             return NextResponse.json({ error: 'telefone, mensagem e tipo são obrigatórios' }, { status: 400 })
         }
+
+        const erro = await validarSessaoEEmpresa(request, empresa || '')
+        if (erro) return erro
+
         const record = await base('Mensagens').create({
             'telefone': telefone,
             'mensagem': mensagem,

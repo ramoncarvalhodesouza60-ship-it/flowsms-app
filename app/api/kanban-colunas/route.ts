@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validarSessaoEEmpresa } from '@/lib/auth'
 
 const Airtable = require('airtable')
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
 
-// Colunas padrão, usadas quando a empresa ainda não personalizou nada
 const colunasPadrao = [
     { id: 'novo', label: 'Novo', cor: '#74c7ec' },
     { id: 'em_atendimento', label: 'Em Atendimento', cor: '#f9e2af' },
@@ -31,6 +31,10 @@ async function buscarRecordCliente(empresa: string): Promise<any | null> {
 export async function GET(request: NextRequest) {
     try {
         const empresa = request.nextUrl.searchParams.get('empresa') || ''
+
+        const erro = await validarSessaoEEmpresa(request, empresa)
+        if (erro) return erro
+
         const record = await buscarRecordCliente(empresa)
 
         const bruto = record?.get('kanban_colunas')
@@ -44,7 +48,6 @@ export async function GET(request: NextRequest) {
                 return NextResponse.json({ success: true, colunas })
             }
         } catch {
-            // JSON inválido salvo por engano — volta pro padrão
         }
 
         return NextResponse.json({ success: true, colunas: colunasPadrao })
@@ -56,6 +59,9 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
     try {
         const { empresa, colunas } = await request.json()
+
+        const erro = await validarSessaoEEmpresa(request, empresa || '')
+        if (erro) return erro
 
         if (!Array.isArray(colunas) || colunas.length === 0) {
             return NextResponse.json({ success: false, error: 'É preciso ter pelo menos 1 coluna' }, { status: 400 })

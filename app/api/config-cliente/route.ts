@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validarSessaoEEmpresa } from '@/lib/auth'
 
 const Airtable = require('airtable')
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
@@ -21,6 +22,10 @@ async function buscarRecordCliente(empresa: string): Promise<any | null> {
 export async function GET(request: NextRequest) {
     try {
         const empresa = request.nextUrl.searchParams.get('empresa') || ''
+
+        const erro = await validarSessaoEEmpresa(request, empresa)
+        if (erro) return erro
+
         const record = await buscarRecordCliente(empresa)
 
         if (!record) {
@@ -40,6 +45,9 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
     try {
         const { empresa, telefoneAdmin } = await request.json()
+
+        const erro = await validarSessaoEEmpresa(request, empresa || '')
+        if (erro) return erro
 
         const record = await buscarRecordCliente(empresa)
         if (!record) {

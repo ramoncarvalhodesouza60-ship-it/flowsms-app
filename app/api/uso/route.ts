@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validarSessaoEEmpresa } from '@/lib/auth'
 
 const Airtable = require('airtable')
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
@@ -17,13 +18,11 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'empresa é obrigatória' }, { status: 400 })
         }
 
+        const erro = await validarSessaoEEmpresa(request, empresa)
+        if (erro) return erro
+
         const { inicio, fim } = limitesDoMesAtual()
 
-        // Conta WhatsApp — mensagens do tipo 'enviada' no mês atual
-        // OBS: campo "horario" é Single line text no Airtable, não Date.
-        // Como o valor é ISO 8601 (ex: 2026-06-18T06:15:04.979Z), a comparação
-        // de texto (>=, <) funciona corretamente, ao contrário de IS_AFTER/IS_BEFORE
-        // que exigem um campo de Data de verdade.
         let totalWhatsApp = 0
         const telefonesUsados = new Set<string>()
 
@@ -42,7 +41,6 @@ export async function GET(request: NextRequest) {
             )
         })
 
-        // Conta SMS novos — tipo 'sms' na tabela Mensagens (após nossa correção)
         let totalSMSNovo = 0
         const telefonesSMSUsados = new Set<string>()
 
@@ -61,11 +59,9 @@ export async function GET(request: NextRequest) {
             )
         })
 
-        // Conta SMS antigos — campo 'SMS Enviados' na tabela Contato (antes da correção)
         let totalSMSAntigo = 0
 
         await new Promise<void>((resolve, reject) => {
-            // Busca contatos com SMS marcado — sem filtro de empresa pois os antigos não tinham empresa
             const formula = '{SMS Enviados} = TRUE()'
             base('Contato').select({ filterByFormula: formula, maxRecords: 5000 }).eachPage(
                 (pageRecords: any[], fetchNextPage: () => void) => {

@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { verificarToken } from '@/lib/auth'
 
-// Salva o novo system_prompt no registro do cliente, na tabela Clientes do Airtable
-export async function PATCH(request: Request) {
+export async function PATCH(request: NextRequest) {
     try {
         const { clienteId, system_prompt } = await request.json()
 
@@ -9,9 +9,32 @@ export async function PATCH(request: Request) {
             return NextResponse.json({ success: false, error: 'clienteId não informado' }, { status: 400 })
         }
 
+        const cookie = request.cookies.get('sessao')
+        if (!cookie) {
+            return NextResponse.json({ success: false, error: 'Não autenticado' }, { status: 401 })
+        }
+        const sessao = await verificarToken(cookie.value)
+        if (!sessao) {
+            return NextResponse.json({ success: false, error: 'Sessão inválida' }, { status: 401 })
+        }
+
         const baseId = process.env.AIRTABLE_BASE_ID
         const apiKey = process.env.AIRTABLE_API_KEY
         const tabelaClientes = process.env.AIRTABLE_CLIENTES_ID
+
+        // Confirma que o registro pertence à empresa da sessão (a não ser que seja admin)
+        if (!sessao.admin) {
+            const urlBusca = 'https://api.airtable.com/v0/' + baseId + '/' + tabelaClientes + '/' + clienteId
+            const resBusca = await fetch(urlBusca, {
+                headers: { Authorization: 'Bearer ' + apiKey },
+            })
+            const dataBusca = await resBusca.json()
+            const empresaDoRegistro = dataBusca?.fields?.empresa
+
+            if (empresaDoRegistro !== sessao.empresa) {
+                return NextResponse.json({ success: false, error: 'Acesso negado' }, { status: 403 })
+            }
+        }
 
         const url = 'https://api.airtable.com/v0/' + baseId + '/' + tabelaClientes + '/' + clienteId
 

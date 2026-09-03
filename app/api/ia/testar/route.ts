@@ -1,9 +1,17 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { verificarToken } from '@/lib/auth'
 
-import { NextResponse } from 'next/server'
-
-// Simula uma resposta da IA usando o system_prompt em edição, sem precisar salvar antes
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
+        const cookie = request.cookies.get('sessao')
+        if (!cookie) {
+            return NextResponse.json({ success: false, error: 'Não autenticado' }, { status: 401 })
+        }
+        const sessao = await verificarToken(cookie.value)
+        if (!sessao) {
+            return NextResponse.json({ success: false, error: 'Sessão inválida' }, { status: 401 })
+        }
+
         const { system_prompt, mensagem } = await request.json()
 
         if (!system_prompt || !mensagem) {

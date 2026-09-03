@@ -51,3 +51,21 @@ export async function validarSessaoEEmpresa(
 
     return null
 }
+// Aceita OU sessão de usuário válida, OU a chave interna (chamadas servidor-a-servidor, ex: webhook)
+export async function validarSessaoOuInterno(request: NextRequest): Promise<NextResponse | null> {
+    const chaveInterna = request.headers.get('x-chave-interna')
+    if (chaveInterna && chaveInterna === process.env.CHAVE_INTERNA) {
+        return null
+    }
+
+    const cookie = request.cookies.get('sessao')
+    if (!cookie) {
+        return NextResponse.json({ success: false, error: 'Não autenticado' }, { status: 401 })
+    }
+    const sessao = await verificarToken(cookie.value)
+    if (!sessao) {
+        return NextResponse.json({ success: false, error: 'Sessão inválida' }, { status: 401 })
+    }
+
+    return null
+}

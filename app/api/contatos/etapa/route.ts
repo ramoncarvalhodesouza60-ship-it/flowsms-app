@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validarSessaoEEmpresa } from '@/lib/auth'
 
 const Airtable = require('airtable')
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
@@ -15,9 +16,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: false, error: 'telefone e etapa são obrigatorios' }, { status: 400 })
         }
 
+        const erro = await validarSessaoEEmpresa(req, empresa || '')
+        if (erro) return erro
+
         const telNorm = normalizarTelefone(telefone)
 
-        // Busca o contato pelo telefone
         const records: any[] = []
         await new Promise<void>((resolve, reject) => {
             base('Contato').select({ maxRecords: 500 }).eachPage(
@@ -36,19 +39,16 @@ export async function POST(req: NextRequest) {
 
         let contatoId: string
         if (records.length === 0) {
-            // Contato nao existe ainda — cria com telefone e etapa
             const novoRecord = await base('Contato').create({
                 'Phone': telefone,
                 'etapa': etapa,
             })
             contatoId = novoRecord.id
         } else {
-            // Atualiza a etapa do contato existente
             await base('Contato').update(records[0].id, { etapa: etapa })
             contatoId = records[0].id
         }
 
-        // Verifica se a nova etapa está marcada como "conversão" pra essa empresa
         if (empresa) {
             let colunas: any[] = []
             let whatsappToken: string | null = null
@@ -74,23 +74,9 @@ export async function POST(req: NextRequest) {
 
             const colunaAtual = colunas.find((c: any) => c.id === etapa)
 
-            console.log('DEBUG ETAPA:', {
-                telefoneRecebido: telefone,
-                etapaRecebida: etapa,
-                empresaRecebida: empresa,
-                quantidadeColunasEncontradas: colunas.length,
-                idsDasColunas: colunas.map((c: any) => c.id),
-                colunaAtualEncontrada: !!colunaAtual,
-                ehConversao: colunaAtual?.ehConversao,
-                temWhatsappToken: !!whatsappToken,
-                temPhoneNumberId: !!phoneNumberId,
-            })
-
             if (colunaAtual?.ehConversao) {
-                // 1. Libera a vaga do atendente
                 await base('Contato').update(contatoId, { atendimento_ativo: false })
 
-                // 2. Manda a mensagem de agradecimento (personalizada ou padrão)
                 if (whatsappToken && phoneNumberId) {
                     const mensagem = colunaAtual.mensagemConversao?.trim() ||
                         'Muito obrigado pela confiança! 😊 Foi um prazer atender você. Qualquer coisa, estamos por aqui!'
@@ -99,7 +85,10 @@ export async function POST(req: NextRequest) {
                     try {
                         await fetch(baseUrl + '/api/whatsapp/send', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'x-chave-interna': process.env.CHAVE_INTERNA || '',
+                            },
                             body: JSON.stringify({
                                 telefone,
                                 mensagem,
@@ -110,8 +99,6 @@ export async function POST(req: NextRequest) {
                     } catch (e) {
                         console.error('Erro ao enviar mensagem de conversão:', e)
                     }
-                } else {
-                    console.log('DEBUG ETAPA: era conversão mas faltou whatsappToken ou phoneNumberId, não enviou mensagem')
                 }
             }
         }

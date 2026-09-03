@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verificarToken } from '@/lib/auth'
+import { validarSessaoOuInterno } from '@/lib/auth'
 
 export async function POST(req: NextRequest) {
-    const cookie = req.cookies.get('sessao')
-    if (!cookie) {
-        return NextResponse.json({ success: false, error: 'Não autenticado' }, { status: 401 })
-    }
-    const sessao = await verificarToken(cookie.value)
-    if (!sessao) {
-        return NextResponse.json({ success: false, error: 'Sessão inválida' }, { status: 401 })
-    }
+    const erro = await validarSessaoOuInterno(req)
+    if (erro) return erro
 
     const body = await req.json()
     const telefone = body.telefone

@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { validarSessaoOuInterno } from '@/lib/auth'
 
 const Airtable = require('airtable')
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
@@ -7,8 +8,11 @@ function normalizarTelefone(tel: string) {
     return (tel || '').replace(/\D/g, '')
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
+        const erro = await validarSessaoOuInterno(request)
+        if (erro) return erro
+
         const { telefone, empresa } = await request.json()
 
         if (!telefone || !empresa) {
@@ -17,7 +21,6 @@ export async function POST(request: Request) {
 
         const telNorm = normalizarTelefone(telefone)
 
-        // 1. Busca o registro do contato (mesma lógica de app/api/contatos/etapa)
         let contatoRecord: any = null
         await new Promise<void>((resolve, reject) => {
             base('Contato').select({ maxRecords: 500 }).eachPage(
@@ -35,12 +38,10 @@ export async function POST(request: Request) {
         const etapaAtual = contatoRecord?.get('etapa') || 'novo'
         const jaNotificadaNestaEtapa = contatoRecord?.get('etapa_notificada_quente') || null
 
-        // 2. Se já notificamos nessa mesma etapa, não notifica de novo
         if (jaNotificadaNestaEtapa === etapaAtual) {
             return NextResponse.json({ success: true, notificado: false, motivo: 'Já notificado nesta etapa' })
         }
 
-        // 3. Busca as credenciais do cliente (telefone_admin, token e phone_number_id próprios da empresa)
         let telefoneAdmin: string | null = null
         let whatsappToken: string | null = null
         let phoneNumberId: string | null = null
@@ -64,7 +65,6 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: true, notificado: false, motivo: 'Cliente sem telefone_admin cadastrado' })
         }
 
-        // 4. Manda a notificação via WhatsApp, usando o próprio número/token da empresa (não fixo)
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://flowsms.com.br'
         const nomeContato = contatoRecord?.get('Name') || telefone
 
@@ -75,7 +75,10 @@ export async function POST(request: Request) {
 
         await fetch(baseUrl + '/api/whatsapp/send', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'x-chave-interna': process.env.CHAVE_INTERNA || '',
+            },
             body: JSON.stringify({
                 telefone: telefoneAdmin,
                 mensagem,
@@ -84,7 +87,6 @@ export async function POST(request: Request) {
             }),
         })
 
-        // 5. Marca que já notificamos essa etapa, pra não repetir enquanto o lead não avançar/mudar
         if (contatoRecord) {
             await base('Contato').update(contatoRecord.id, { etapa_notificada_quente: etapaAtual })
         }

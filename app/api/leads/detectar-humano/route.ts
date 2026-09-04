@@ -1,7 +1,11 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { validarSessaoOuInterno } from '@/lib/auth'
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
+        const erro = await validarSessaoOuInterno(request)
+        if (erro) return erro
+
         const { mensagem } = await request.json()
 
         if (!mensagem) {

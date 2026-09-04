@@ -4,6 +4,13 @@ export const maxDuration = 60
 
 const VERIFY_TOKEN = 'flowsms2024'
 
+function headersInternos() {
+    return {
+        'Content-Type': 'application/json',
+        'x-chave-interna': process.env.CHAVE_INTERNA || '',
+    }
+}
+
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const mode = searchParams.get('hub.mode')
@@ -16,8 +23,6 @@ export async function GET(req: NextRequest) {
     return new NextResponse('Forbidden', { status: 403 })
 }
 
-// Busca as últimas N mensagens dessa conversa (telefone + empresa) no Airtable,
-// já ordenadas do mais antigo pro mais recente, no formato que a IA espera.
 async function buscarHistoricoConversa(baseId: string, tableId: string, apiKey: string, telefone: string, empresa: string) {
     const filtro = 'AND({telefone} = "' + telefone + '", {empresa} = "' + empresa + '")'
     const url = 'https://api.airtable.com/v0/' + baseId + '/' + tableId +
@@ -29,7 +34,7 @@ async function buscarHistoricoConversa(baseId: string, tableId: string, apiKey: 
 
     const registros = (data.records || [])
         .map((r: any) => ({ tipo: r.fields.tipo, mensagem: r.fields.mensagem }))
-        .reverse() // volta pra ordem cronológica (mais antigo primeiro)
+        .reverse()
 
     return registros
 }
@@ -58,7 +63,6 @@ export async function POST(req: NextRequest) {
             const url = 'https://api.airtable.com/v0/' + baseId + '/' + tableId
             const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://flowsms.com.br'
 
-            // 1. Busca o cliente pelo phone_number_id
             let systemPrompt: string | null = null
             let empresa = 'FlowSMS Admin'
             let clienteToken: string | null = null
@@ -86,7 +90,6 @@ export async function POST(req: NextRequest) {
                 }
             }
 
-            // 2. Salva mensagem recebida no Airtable
             await fetch(url, {
                 method: 'POST',
                 headers: {
@@ -98,7 +101,6 @@ export async function POST(req: NextRequest) {
                 })
             })
 
-            // 2.4. Verifica se essa conversa já está sendo atendida por um humano (atendimento_ativo + atendente_id)
             let jaAtendidoPorHumano = false
             try {
                 const contatoUrl = 'https://api.airtable.com/v0/' + baseId + '/Contato'
@@ -111,15 +113,12 @@ export async function POST(req: NextRequest) {
                 console.error('Erro ao checar status de atendimento:', e)
             }
 
-            // 2.5. Verifica se o cliente pediu explicitamente pra falar com um atendente humano
-            // (só precisa checar se AINDA não está com atendente — depois de atribuído, fica sempre em silêncio,
-            // não importa o que o cliente escrever depois, até o atendente finalizar o atendimento)
             let pediuHumano = false
             if (!jaAtendidoPorHumano) {
                 try {
                     const humanoRes = await fetch(baseUrl + '/api/leads/detectar-humano', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: headersInternos(),
                         body: JSON.stringify({ mensagem: texto })
                     })
                     const humanoData = await humanoRes.json()
@@ -128,7 +127,7 @@ export async function POST(req: NextRequest) {
                     if (pediuHumano) {
                         await fetch(baseUrl + '/api/atendentes/distribuir', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: headersInternos(),
                             body: JSON.stringify({ telefone, empresa })
                         })
                     }
@@ -139,10 +138,8 @@ export async function POST(req: NextRequest) {
 
             console.log('DEBUG ATENDIMENTO:', { jaAtendidoPorHumano, pediuHumano, telefone })
 
-            // 3. Se já está com atendente humano (e não é o pedido de transferência agora), a IA não responde —
-            // deixa o atendente ver e responder manualmente pelo painel dele.
             if (texto && jaAtendidoPorHumano && !pediuHumano) {
-                // Não faz nada — mensagem já foi salva no passo 2, atendente vê no painel dele
+                // Não faz nada
             } else if (texto) {
                 let resposta: string
                 let imagemUrl: string | null = null
@@ -154,7 +151,7 @@ export async function POST(req: NextRequest) {
 
                     const iaRes = await fetch(baseUrl + '/api/whatsapp/ia', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: headersInternos(),
                         body: JSON.stringify({ historico, systemPrompt, empresa })
                     })
 
@@ -164,10 +161,9 @@ export async function POST(req: NextRequest) {
                 }
 
                 if (resposta) {
-                    // 4. Envia resposta da IA via WhatsApp usando token e phone_number_id do cliente
                     await fetch(baseUrl + '/api/whatsapp/send', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: headersInternos(),
                         body: JSON.stringify({
                             telefone,
                             mensagem: resposta,
@@ -176,7 +172,6 @@ export async function POST(req: NextRequest) {
                         })
                     })
 
-                    // 5. Salva resposta da IA no Airtable
                     await fetch(url, {
                         method: 'POST',
                         headers: {
@@ -194,12 +189,11 @@ export async function POST(req: NextRequest) {
                         })
                     })
 
-                    // 5.5. Se a IA decidiu mostrar a foto de um produto, envia como imagem separada
                     if (imagemUrl) {
                         try {
                             await fetch(baseUrl + '/api/whatsapp/send-media', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
+                                headers: headersInternos(),
                                 body: JSON.stringify({
                                     telefone,
                                     mediaUrl: imagemUrl,
@@ -230,20 +224,18 @@ export async function POST(req: NextRequest) {
                         }
                     }
 
-                    // 6. Detecta se o cliente confirmou um pedido nessa troca de mensagens
                     try {
                         const detectarRes = await fetch(baseUrl + '/api/pedidos/detectar', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: headersInternos(),
                             body: JSON.stringify({ mensagemCliente: texto, respostaIA: resposta })
                         })
                         const detectarData = await detectarRes.json()
 
-                        // 7. Se detectou pedido confirmado, salva e notifica o cliente dono da conversa
                         if (detectarData?.pedido_confirmado) {
                             await fetch(baseUrl + '/api/pedidos/notificar', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
+                                headers: headersInternos(),
                                 body: JSON.stringify({
                                     telefone,
                                     produto: detectarData.produto,
@@ -259,13 +251,12 @@ export async function POST(req: NextRequest) {
                         console.error('Erro ao detectar/notificar pedido:', e)
                     }
 
-                    // 8. Detecta se o lead está "quente" (interesse forte, mesmo sem pedido confirmado) e notifica
                     try {
                         const historicoAtualizado = await buscarHistoricoConversa(baseId!, tableId!, apiKey!, telefone, empresa)
 
                         const quenteRes = await fetch(baseUrl + '/api/leads/detectar-quente', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: headersInternos(),
                             body: JSON.stringify({ historico: historicoAtualizado })
                         })
                         const quenteData = await quenteRes.json()
@@ -273,7 +264,7 @@ export async function POST(req: NextRequest) {
                         if (quenteData?.lead_quente) {
                             await fetch(baseUrl + '/api/leads/notificar-quente', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
+                                headers: headersInternos(),
                                 body: JSON.stringify({ telefone, empresa })
                             })
                         }

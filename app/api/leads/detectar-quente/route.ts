@@ -1,14 +1,17 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { validarSessaoOuInterno } from '@/lib/auth'
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
+        const erro = await validarSessaoOuInterno(request)
+        if (erro) return erro
+
         const { historico } = await request.json()
 
         if (!Array.isArray(historico) || historico.length === 0) {
             return NextResponse.json({ lead_quente: false })
         }
 
-        // Monta um resumo simples da conversa pra análise
         const conversaTexto = historico
             .map((h: { tipo: string; mensagem: string }) => (h.tipo === 'recebida' ? 'Cliente: ' : 'Atendente: ') + h.mensagem)
             .join('\n')

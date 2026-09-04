@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { verificarToken } from '@/lib/auth'
 
 const Airtable = require('airtable')
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
@@ -7,7 +8,6 @@ function normalizarTelefone(tel: string) {
     return (tel || '').replace(/\D/g, '')
 }
 
-// Busca o registro do Contato pelo telefone (aceita com ou sem "+"), igual ao padrão já usado em /api/contatos/etapa
 async function buscarRegistroContato(telefone: string) {
     let record: any = null
     await new Promise<void>((resolve, reject) => {
@@ -24,13 +24,21 @@ async function buscarRegistroContato(telefone: string) {
     return record
 }
 
-// GET /api/contatos/tags?empresa=XXX -> devolve um mapa { telefoneNormalizado: ["quente","vip"] } com todos os contatos
 export async function GET(request: NextRequest) {
     try {
+        const cookie = request.cookies.get('sessao')
+        if (!cookie) return NextResponse.json({ success: false, error: 'Não autenticado' }, { status: 401 })
+        const sessao = await verificarToken(cookie.value)
+        if (!sessao) return NextResponse.json({ success: false, error: 'Sessão inválida' }, { status: 401 })
+
         const mapa: Record<string, string[]> = {}
 
         await new Promise<void>((resolve, reject) => {
-            base('Contato').select({ maxRecords: 1000 }).eachPage(
+            const opcoes: any = { maxRecords: 1000 }
+            if (!sessao.admin) {
+                opcoes.filterByFormula = '{empresa} = "' + sessao.empresa + '"'
+            }
+            base('Contato').select(opcoes).eachPage(
                 (pageRecords: any[], fetchNextPage: () => void) => {
                     pageRecords.forEach((record: any) => {
                         const telefone = record.get('Phone')
@@ -52,9 +60,13 @@ export async function GET(request: NextRequest) {
     }
 }
 
-// POST /api/contatos/tags  { telefone, tags: ["quente","vip"], empresa }  -> salva a lista de tags desse contato
 export async function POST(request: NextRequest) {
     try {
+        const cookie = request.cookies.get('sessao')
+        if (!cookie) return NextResponse.json({ success: false, error: 'Não autenticado' }, { status: 401 })
+        const sessao = await verificarToken(cookie.value)
+        if (!sessao) return NextResponse.json({ success: false, error: 'Sessão inválida' }, { status: 401 })
+
         const { telefone, tags } = await request.json()
         if (!telefone) {
             return NextResponse.json({ success: false, error: 'telefone é obrigatório' }, { status: 400 })
@@ -63,6 +75,11 @@ export async function POST(request: NextRequest) {
         const record = await buscarRegistroContato(telefone)
         if (!record) {
             return NextResponse.json({ success: false, error: 'Contato não encontrado' }, { status: 404 })
+        }
+
+        const empresaDoRegistro = record.get('empresa')
+        if (!sessao.admin && sessao.empresa !== empresaDoRegistro) {
+            return NextResponse.json({ success: false, error: 'Acesso negado' }, { status: 403 })
         }
 
         const valor = Array.isArray(tags) ? tags.join(',') : ''

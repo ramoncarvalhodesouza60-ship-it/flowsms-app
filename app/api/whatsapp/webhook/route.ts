@@ -245,6 +245,8 @@ export async function POST(req: NextRequest) {
                                     empresa,
                                     emailCliente: clienteEmail,
                                     telefoneAdminCliente: clienteTelefoneAdmin,
+                                    whatsappToken: clienteToken,
+                                    whatsappPhoneNumberId: clientePhoneNumberId,
                                 })
                             })
                         }

@@ -1,8 +1,12 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { validarSessaoOuInterno } from '@/lib/auth'
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
-        const { telefone, produto, valor, forma_pagamento, empresa, emailCliente, telefoneAdminCliente } =
+        const erro = await validarSessaoOuInterno(request)
+        if (erro) return erro
+
+        const { telefone, produto, valor, forma_pagamento, empresa, emailCliente, telefoneAdminCliente, whatsappToken, whatsappPhoneNumberId } =
             await request.json()
 
         console.log('NOTIFICAR - dados recebidos:', JSON.stringify({ telefone, produto, valor, forma_pagamento, empresa, emailCliente, telefoneAdminCliente }))
@@ -11,7 +15,6 @@ export async function POST(request: Request) {
         const apiKey = process.env.AIRTABLE_API_KEY
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://flowsms.com.br'
 
-        // 1. Salva o pedido no Airtable, com status "Pendente" (aguardando confirmação manual do cliente)
         const pedidosUrl = 'https://api.airtable.com/v0/' + baseId + '/Pedidos'
         const airtableRes = await fetch(pedidosUrl, {
             method: 'POST',
@@ -43,17 +46,19 @@ export async function POST(request: Request) {
             '💳 Pagamento: ' + (forma_pagamento || 'Não especificado') + '\n\n' +
             'Acesse o painel pra confirmar ou recusar este pedido.'
 
-        // 2. Notifica via WhatsApp, no número pessoal do cliente dono desse pedido (se ele tiver cadastrado)
         if (telefoneAdminCliente) {
             try {
                 const waRes = await fetch(baseUrl + '/api/whatsapp/send', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-chave-interna': process.env.CHAVE_INTERNA || '',
+                    },
                     body: JSON.stringify({
                         telefone: telefoneAdminCliente,
                         mensagem: mensagemNotificacao,
-                        token: process.env.WHATSAPP_TOKEN,
-                        phoneNumberId: process.env.WHATSAPP_PHONE_ID,
+                        token: whatsappToken || process.env.WHATSAPP_TOKEN,
+                        phoneNumberId: whatsappPhoneNumberId || process.env.WHATSAPP_PHONE_ID,
                     }),
                 })
                 const waData = await waRes.json()
@@ -65,7 +70,6 @@ export async function POST(request: Request) {
             console.log('NOTIFICAR - telefoneAdminCliente vazio, WhatsApp não enviado')
         }
 
-        // 3. Notifica via e-mail, no e-mail do cliente dono desse pedido (se ele tiver cadastrado)
         if (emailCliente) {
             try {
                 const emailRes = await fetch('https://api.resend.com/emails', {

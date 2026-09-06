@@ -225,10 +225,11 @@ export async function POST(req: NextRequest) {
                     }
 
                     try {
+                        const historicoParaPedido = await buscarHistoricoConversa(baseId!, tableId!, apiKey!, telefone, empresa)
                         const detectarRes = await fetch(baseUrl + '/api/pedidos/detectar', {
                             method: 'POST',
                             headers: headersInternos(),
-                            body: JSON.stringify({ mensagemCliente: texto, respostaIA: resposta })
+                            body: JSON.stringify({ mensagemCliente: texto, respostaIA: resposta, historico: historicoParaPedido })
                         })
                         const detectarData = await detectarRes.json()
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { verificarToken } from '@/lib/auth'
 
 const Airtable = require('airtable')
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
@@ -7,8 +8,6 @@ function normalizarTelefone(tel: string) {
     return (tel || '').replace(/\D/g, '')
 }
 
-// Colunas padrão, usadas quando a empresa ainda não personalizou nada
-// (igual ao app/api/kanban-colunas/route.ts, pra manter consistência)
 const colunasPadrao = [
     { id: 'novo', label: 'Novo', cor: '#74c7ec' },
     { id: 'em_atendimento', label: 'Em Atendimento', cor: '#f9e2af' },
@@ -38,7 +37,6 @@ async function buscarColunas(empresa: string) {
         const colunas = JSON.parse(bruto)
         if (Array.isArray(colunas) && colunas.length > 0) return colunas
     } catch {
-        // JSON inválido salvo por engano — volta pro padrão
     }
     return colunasPadrao
 }
@@ -50,14 +48,20 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'atendenteId é obrigatório' }, { status: 400 })
         }
 
-        // 1. Busca o atendente pra saber a empresa dele
+        const cookie = request.cookies.get('sessao')
+        if (!cookie) return NextResponse.json({ success: false, error: 'Não autenticado' }, { status: 401 })
+        const sessao = await verificarToken(cookie.value)
+        if (!sessao) return NextResponse.json({ success: false, error: 'Sessão inválida' }, { status: 401 })
+
         const atendenteRecord = await base('Atendentes').find(atendenteId)
         const empresa = atendenteRecord.get('empresa') || ''
 
-        // 2. Busca as colunas do Kanban dessa empresa
+        if (!sessao.admin && sessao.empresa !== empresa) {
+            return NextResponse.json({ success: false, error: 'Acesso negado' }, { status: 403 })
+        }
+
         const colunas = await buscarColunas(empresa)
 
-        // 3. Busca só os contatos atribuídos a esse atendente e com atendimento ativo
         const contatos: any[] = []
         await new Promise<void>((resolve, reject) => {
             const formula = 'AND({atendente_id} = "' + atendenteId + '", {atendimento_ativo} = TRUE())'
@@ -89,12 +93,10 @@ export async function GET(request: NextRequest) {
             }
         })
 
-        // Se o atendente não tem nenhum contato atribuído, já retorna vazio (evita puxar mensagens à toa)
         if (telefonesAtendente.size === 0) {
             return NextResponse.json({ success: true, mensagens: [], colunas })
         }
 
-        // 4. Busca as mensagens da empresa e filtra só as dos telefones desse atendente
         const mensagens: any[] = []
         await new Promise<void>((resolve, reject) => {
             const opcoes: any = { maxRecords: 1000, sort: [{ field: 'horario', direction: 'asc' }] }

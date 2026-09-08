@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validarSessaoEEmpresa } from '@/lib/auth'
 
 const Airtable = require('airtable')
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
@@ -24,10 +25,13 @@ async function buscarCredenciaisCliente(empresa: string): Promise<{ token: strin
     return resultado
 }
 
-// Busca o perfil atual (foto, descrição) e o status do nome de exibição
 export async function GET(request: NextRequest) {
     try {
         const empresa = request.nextUrl.searchParams.get('empresa') || ''
+
+        const erro = await validarSessaoEEmpresa(request, empresa)
+        if (erro) return erro
+
         const credenciais = await buscarCredenciaisCliente(empresa)
 
         if (!credenciais) {
@@ -36,14 +40,12 @@ export async function GET(request: NextRequest) {
 
         const { token, phoneNumberId } = credenciais
 
-        // Busca about, descrição e foto atual
         const perfilRes = await fetch(
             'https://graph.facebook.com/v25.0/' + phoneNumberId + '/whatsapp_business_profile?fields=about,description,profile_picture_url',
             { headers: { Authorization: 'Bearer ' + token } }
         )
         const perfilData = await perfilRes.json()
 
-        // Busca o status do nome de exibição (aprovado, pendente, recusado)
         const nomeRes = await fetch(
             'https://graph.facebook.com/v25.0/' + phoneNumberId + '?fields=name_status,verified_name',
             { headers: { Authorization: 'Bearer ' + token } }
@@ -65,10 +67,13 @@ export async function GET(request: NextRequest) {
     }
 }
 
-// Atualiza foto e/ou descrição do perfil do WhatsApp
 export async function POST(request: NextRequest) {
     try {
         const { empresa, about, description, fotoBase64 } = await request.json()
+
+        const erro = await validarSessaoEEmpresa(request, empresa || '')
+        if (erro) return erro
+
         const credenciais = await buscarCredenciaisCliente(empresa)
 
         if (!credenciais) {
@@ -79,13 +84,10 @@ export async function POST(request: NextRequest) {
 
         let profilePictureHandle: string | null = null
 
-        // Se veio uma foto nova, faz o upload em 2 etapas (Resumable Upload API)
         if (fotoBase64) {
-            // fotoBase64 vem como "data:image/jpeg;base64,XXXXX" — extrai só os bytes
             const base64Limpo = fotoBase64.split(',')[1] || fotoBase64
             const bufferImagem = Buffer.from(base64Limpo, 'base64')
 
-            // Etapa 1: inicia a sessão de upload
             const uploadInicioRes = await fetch(
                 'https://graph.facebook.com/v25.0/' + APP_ID + '/uploads' +
                 '?file_name=perfil.jpg&file_length=' + bufferImagem.length + '&file_type=image/jpeg' +
@@ -99,7 +101,6 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json({ success: false, error: 'Erro ao iniciar upload da foto: ' + JSON.stringify(uploadInicioData) }, { status: 500 })
             }
 
-            // Etapa 2: envia os bytes da imagem
             const uploadArquivoRes = await fetch(
                 'https://graph.facebook.com/v25.0/' + uploadInicioData.id,
                 {
@@ -121,7 +122,6 @@ export async function POST(request: NextRequest) {
             profilePictureHandle = uploadArquivoData.h
         }
 
-        // Etapa 3: atualiza o perfil (about, description e/ou foto)
         const corpoAtualizacao: any = { messaging_product: 'whatsapp' }
         if (about !== undefined) corpoAtualizacao.about = about
         if (description !== undefined) corpoAtualizacao.description = description

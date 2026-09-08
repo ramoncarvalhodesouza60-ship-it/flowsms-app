@@ -1,26 +1,33 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { verificarToken } from '@/lib/auth'
 
-// Rota temporária/manual — usada só pra criar a PRIMEIRA subconta de teste
-// na Asaas, exigida no "período de avaliação" antes de liberar o BaaS/White Label.
-// Depois que a subconta de teste for criada com sucesso, essa rota já cumpriu
-// seu papel — a criação de subcontas reais dos clientes vira parte do item 3
-// (tela de Pagamentos), com outro endpoint parecido com esse.
-
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
     try {
+        const cookie = request.cookies.get('sessao')
+        if (!cookie) {
+            return NextResponse.json({ erro: 'Não autenticado' }, { status: 401 })
+        }
+        const sessao = await verificarToken(cookie.value)
+        if (!sessao) {
+            return NextResponse.json({ erro: 'Sessão inválida' }, { status: 401 })
+        }
+        if (!sessao.admin) {
+            return NextResponse.json({ erro: 'Acesso negado — apenas admin pode criar subcontas' }, { status: 403 })
+        }
+
         const body = await request.json();
 
         const {
             name,
             email,
             cpfCnpj,
-            companyType, // MEI, LIMITED, INDIVIDUAL, ASSOCIATION
-            birthDate, // obrigatório quando cpfCnpj é CPF (pessoa física)
+            companyType,
+            birthDate,
             mobilePhone,
             incomeValue,
             address,
             addressNumber,
-            province, // bairro
+            province,
             postalCode,
         } = body;
 

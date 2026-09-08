@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verificarToken } from '@/lib/auth'
+import { verificarRateLimit, obterIP } from '@/lib/rateLimit'
 
 export async function POST(request: NextRequest) {
     try {
@@ -10,6 +11,15 @@ export async function POST(request: NextRequest) {
         const sessao = await verificarToken(cookie.value)
         if (!sessao) {
             return NextResponse.json({ success: false, error: 'Sessão inválida' }, { status: 401 })
+        }
+
+        const ip = obterIP(request)
+        const rate = verificarRateLimit(ip, 'ia-testar', 15, 60 * 1000)
+        if (!rate.permitido) {
+            return NextResponse.json(
+                { success: false, error: 'Muitos testes seguidos. Aguarde um minuto e tente novamente.' },
+                { status: 429 }
+            )
         }
 
         const { system_prompt, mensagem } = await request.json()

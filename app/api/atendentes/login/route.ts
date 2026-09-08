@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { verificarRateLimit, obterIP } from '@/lib/rateLimit'
+import { criarToken } from '@/lib/auth'
 import bcrypt from 'bcryptjs'
 
 const Airtable = require('airtable')
@@ -66,7 +67,23 @@ export async function POST(request: Request) {
 
         const { senhaSalva: _omitir, ...atendenteEncontrado } = registroEncontrado
 
-        return NextResponse.json({ success: true, atendente: atendenteEncontrado })
+        const token = await criarToken({
+            email: atendenteEncontrado.email,
+            empresa: atendenteEncontrado.empresa,
+            admin: false,
+        })
+
+        const resposta = NextResponse.json({ success: true, atendente: atendenteEncontrado })
+
+        resposta.cookies.set('sessao', token, {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'lax',
+            maxAge: 60 * 60 * 24 * 7,
+            path: '/',
+        })
+
+        return resposta
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }

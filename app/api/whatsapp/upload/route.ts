@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { verificarToken } from '@/lib/auth'
 import { put } from '@vercel/blob'
 
-// Mapeia o mime type real do arquivo para a extensao correta.
-// Isso evita o erro "mismatched MIME type" da Meta, que ocorre quando
-// a extensao do nome do arquivo nao corresponde ao Content-Type real.
 function extensaoPorMimeType(mimeType: string): string | null {
     const mapa: Record<string, string> = {
         'audio/mp4': 'mp4',
@@ -26,6 +24,15 @@ function extensaoPorMimeType(mimeType: string): string | null {
 
 export async function POST(request: NextRequest) {
     try {
+        const cookie = request.cookies.get('sessao')
+        if (!cookie) {
+            return NextResponse.json({ success: false, error: 'Não autenticado' }, { status: 401 })
+        }
+        const sessao = await verificarToken(cookie.value)
+        if (!sessao) {
+            return NextResponse.json({ success: false, error: 'Sessão inválida' }, { status: 401 })
+        }
+
         const formData = await request.formData()
         const file = formData.get('file') as File | null
 
@@ -33,11 +40,8 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Nenhum arquivo enviado' }, { status: 400 })
         }
 
-        // Descobre a extensao correta baseada no mime type REAL do arquivo,
-        // em vez de confiar no nome que veio do front-end.
         const extensaoCorreta = extensaoPorMimeType(file.type)
 
-        // Nome base sem extensao, limpo de espacos
         const nomeBase = file.name
             .replace(/\s+/g, '-')
             .replace(/\.[^/.]+$/, '')

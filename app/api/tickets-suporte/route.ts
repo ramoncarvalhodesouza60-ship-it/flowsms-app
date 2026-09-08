@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verificarToken } from '@/lib/auth'
 
 const AIRTABLE_API_KEY = process.env.AIRTABLE_API_KEY;
 const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID;
 const TICKETS_TABLE_ID = 'tblkQtQ43853vRNi3'; // TicketsSuporte
 
-// GET: lista tickets (opcionalmente filtrados por empresa ou status)
+// GET: lista tickets (só admin, usado no painel /suporte-admin)
 export async function GET(request: NextRequest) {
   try {
+    const cookie = request.cookies.get('sessao')
+    if (!cookie) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    const sessao = await verificarToken(cookie.value)
+    if (!sessao) return NextResponse.json({ error: 'Sessão inválida' }, { status: 401 })
+    if (!sessao.admin) return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+
     const { searchParams } = new URL(request.url);
     const empresa = searchParams.get('empresa');
     const status = searchParams.get('status');
@@ -51,14 +58,23 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: cria um novo ticket de suporte
+// POST: cria um novo ticket de suporte (qualquer cliente logado pode abrir, dono do próprio ticket)
 export async function POST(request: NextRequest) {
   try {
+    const cookie = request.cookies.get('sessao')
+    if (!cookie) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    const sessao = await verificarToken(cookie.value)
+    if (!sessao) return NextResponse.json({ error: 'Sessão inválida' }, { status: 401 })
+
     const body = await request.json();
     const { empresa, email_cliente, categoria, mensagem_inicial } = body;
 
     if (!empresa || !mensagem_inicial) {
       return NextResponse.json({ error: 'empresa e mensagem_inicial são obrigatórios' }, { status: 400 });
+    }
+
+    if (!sessao.admin && sessao.empresa !== empresa) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
     }
 
     const mensagens = [

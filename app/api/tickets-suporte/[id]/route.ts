@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verificarToken } from '@/lib/auth'
 
 const AIRTABLE_API_KEY = process.env.AIRTABLE_API_KEY;
 const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID;
 const TICKETS_TABLE_ID = 'tblkQtQ43853vRNi3'; // TicketsSuporte
 
-// GET: busca um ticket específico pelo ID
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const cookie = request.cookies.get('sessao')
+    if (!cookie) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    const sessao = await verificarToken(cookie.value)
+    if (!sessao) return NextResponse.json({ error: 'Sessão inválida' }, { status: 401 })
+
     const { id } = await params;
 
     const response = await fetch(
@@ -26,6 +31,11 @@ export async function GET(
     }
 
     const record = await response.json();
+
+    if (!sessao.admin && sessao.empresa !== record.fields.empresa) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
+    }
+
     const ticket = {
       id: record.id,
       empresa: record.fields.empresa || '',
@@ -44,12 +54,16 @@ export async function GET(
   }
 }
 
-// PATCH: adiciona mensagem e/ou atualiza status/atendente do ticket
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const cookie = request.cookies.get('sessao')
+    if (!cookie) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+    const sessao = await verificarToken(cookie.value)
+    if (!sessao) return NextResponse.json({ error: 'Sessão inválida' }, { status: 401 })
+
     const { id } = await params;
     const body = await request.json();
     const { nova_mensagem, remetente, status, atendente_id } = body;
@@ -68,6 +82,11 @@ export async function PATCH(
     }
 
     const registroAtual = await buscaResponse.json();
+
+    if (!sessao.admin && sessao.empresa !== registroAtual.fields.empresa) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
+    }
+
     let mensagens = registroAtual.fields.mensagens
       ? JSON.parse(registroAtual.fields.mensagens)
       : [];

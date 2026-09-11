@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { validarSessaoEEmpresa } from '@/lib/auth'
+import { validarSessaoEEmpresa, registrarLog } from '@/lib/auth'
 
 const Airtable = require('airtable')
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
@@ -57,6 +57,8 @@ export async function PATCH(request: NextRequest) {
         await base('Clientes').update(record.id, {
             'telefone_admin': telefoneAdmin || '',
         })
+
+        await registrarLog(empresa, 'editou_config', `Alterou telefone_admin para ${telefoneAdmin}`, empresa)
 
         return NextResponse.json({ success: true })
     } catch (error: any) {

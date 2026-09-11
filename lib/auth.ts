@@ -69,3 +69,21 @@ export async function validarSessaoOuInterno(request: NextRequest): Promise<Next
 
     return null
 }
+
+const Airtable = require('airtable')
+const baseAuditoria = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID)
+
+// Registra uma ação sensível no log de auditoria (LogsAuditoria no Airtable).
+// Nunca lança erro — se falhar, só loga no console, pra não quebrar a rota principal.
+export async function registrarLog(usuarioEmail: string, acao: string, detalhes: string, empresa: string) {
+    try {
+        await baseAuditoria('LogsAuditoria').create({
+            usuario_email: usuarioEmail,
+            acao,
+            detalhes,
+            empresa,
+        })
+    } catch (e) {
+        console.error('Erro ao registrar log de auditoria:', e)
+    }
+}

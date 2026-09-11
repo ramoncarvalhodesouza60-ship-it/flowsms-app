@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { verificarRateLimit, obterIP } from '@/lib/rateLimit'
-import { criarToken } from '@/lib/auth'
+import { criarToken, registrarLog } from '@/lib/auth'
 import bcrypt from 'bcryptjs'
 
 const Airtable = require('airtable')
@@ -75,6 +75,8 @@ export async function POST(request: Request) {
             empresa: clienteEncontrado.empresa,
             admin: ehAdmin,
         })
+
+        await registrarLog(clienteEncontrado.email, 'login', 'Login realizado com sucesso', clienteEncontrado.empresa)
 
         const resposta = NextResponse.json({ success: true, cliente: clienteEncontrado })
 

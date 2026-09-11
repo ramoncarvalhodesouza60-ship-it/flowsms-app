@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { validarSessaoEEmpresa, verificarToken } from '@/lib/auth'
+import { validarSessaoEEmpresa, verificarToken, registrarLog } from '@/lib/auth'
 import bcrypt from 'bcryptjs'
 
 const Airtable = require('airtable')
@@ -50,6 +50,9 @@ export async function POST(request: NextRequest) {
         const erro = await validarSessaoEEmpresa(request, empresa)
         if (erro) return erro
 
+        const cookieAtual = request.cookies.get('sessao')
+        const sessaoAtual = cookieAtual ? await verificarToken(cookieAtual.value) : null
+
         const senhaHash = await bcrypt.hash(senha, 10)
 
         const record = await base('Atendentes').create({
@@ -61,6 +64,9 @@ export async function POST(request: NextRequest) {
             'capacidade_maxima': Number(capacidadeMaxima) || 10,
             'ativo': true,
         })
+
+        await registrarLog(sessaoAtual?.email || 'desconhecido', 'criou_atendente', `Criou atendente ${email}`, empresa)
+
         return NextResponse.json({ success: true, id: record.id })
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 })
@@ -95,6 +101,9 @@ export async function PATCH(request: NextRequest) {
         if (ativo !== undefined) campos['ativo'] = ativo
 
         const result = await base('Atendentes').update(id, campos)
+
+        await registrarLog(sessao.email, 'editou_atendente', `Editou atendente ${email || empresaDoRegistro} (id ${id})`, empresaDoRegistro)
+
         return NextResponse.json({ success: true, id: result.id })
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 })
@@ -118,6 +127,9 @@ export async function DELETE(request: NextRequest) {
         }
 
         await base('Atendentes').destroy(id)
+
+        await registrarLog(sessao.email, 'excluiu_atendente', `Excluiu atendente (id ${id})`, empresaDoRegistro)
+
         return NextResponse.json({ success: true })
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 })

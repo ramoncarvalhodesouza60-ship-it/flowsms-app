@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verificarToken } from '@/lib/auth'
+import { verificarToken, registrarLog } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
     try {
@@ -67,6 +67,8 @@ export async function POST(request: NextRequest) {
                 { status: resposta.status }
             );
         }
+
+        await registrarLog(sessao.email, 'criou_subconta_asaas', `Criou subconta para ${name} (${cpfCnpj})`, 'admin')
 
         return NextResponse.json({
             sucesso: true,

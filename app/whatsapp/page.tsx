@@ -127,6 +127,7 @@ function WhatsAppConteudo() {
     const [dragId, setDragId] = useState<string | null>(null)
     const [colunas, setColunas] = useState(colunasPadrao)
     const [colunasCarregadas, setColunasCarregadas] = useState(false)
+    const [colunasVersao, setColunasVersao] = useState(0)
     const [editandoColunas, setEditandoColunas] = useState(false)
     const [dragColunaId, setDragColunaId] = useState<string | null>(null)
     const [novaColunaLabel, setNovaColunaLabel] = useState('')
@@ -171,6 +172,7 @@ function WhatsAppConteudo() {
             const data = await res.json()
             if (data.success && Array.isArray(data.colunas) && data.colunas.length > 0) {
                 setColunas(data.colunas)
+                setColunasVersao(data.versao || 0)
             }
         } catch (e) {
             console.error('Erro ao carregar colunas:', e)
@@ -181,11 +183,20 @@ function WhatsAppConteudo() {
     async function salvarColunas(novasColunas: typeof colunasPadrao) {
         setColunas(novasColunas)
         try {
-            await fetch('/api/kanban-colunas', {
+            const res = await fetch('/api/kanban-colunas', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ empresa: empresaAtual, colunas: novasColunas }),
+                body: JSON.stringify({ empresa: empresaAtual, colunas: novasColunas, versaoEsperada: colunasVersao }),
             })
+            const data = await res.json()
+            if (data.success) {
+                setColunasVersao(data.versao)
+            } else if (data.conflito) {
+                // Outra aba salvou por cima — recarrega a versão real e avisa
+                alert('Essas colunas foram atualizadas em outra aba. A tela vai recarregar com a versão mais recente.')
+                setColunas(data.colunas)
+                setColunasVersao(data.versao)
+            }
         } catch (e) {
             console.error('Erro ao salvar colunas:', e)
         }

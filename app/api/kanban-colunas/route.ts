@@ -36,21 +36,22 @@ export async function GET(request: NextRequest) {
         if (erro) return erro
 
         const record = await buscarRecordCliente(empresa)
+        const versao = record?.get('kanban_colunas_versao') || 0
 
         const bruto = record?.get('kanban_colunas')
         if (!bruto) {
-            return NextResponse.json({ success: true, colunas: colunasPadrao })
+            return NextResponse.json({ success: true, colunas: colunasPadrao, versao })
         }
 
         try {
             const colunas = JSON.parse(bruto)
             if (Array.isArray(colunas) && colunas.length > 0) {
-                return NextResponse.json({ success: true, colunas })
+                return NextResponse.json({ success: true, colunas, versao })
             }
         } catch {
         }
 
-        return NextResponse.json({ success: true, colunas: colunasPadrao })
+        return NextResponse.json({ success: true, colunas: colunasPadrao, versao })
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
     try {
-        const { empresa, colunas } = await request.json()
+        const { empresa, colunas, versaoEsperada } = await request.json()
 
         const erro = await validarSessaoEEmpresa(request, empresa || '')
         if (erro) return erro
@@ -72,11 +73,33 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Cliente não encontrado' }, { status: 404 })
         }
 
+        const versaoAtual = record.get('kanban_colunas_versao') || 0
+
+        // Se a versão que essa aba tinha em mãos já está desatualizada
+        // (alguém mais salvou entretanto), recusa e devolve a versão real
+        if (typeof versaoEsperada === 'number' && versaoEsperada !== versaoAtual) {
+            const colunasAtuais = record.get('kanban_colunas')
+            let colunasReais = colunasPadrao
+            try {
+                const parsed = JSON.parse(colunasAtuais)
+                if (Array.isArray(parsed) && parsed.length > 0) colunasReais = parsed
+            } catch { }
+            return NextResponse.json({
+                success: false,
+                conflito: true,
+                error: 'Essas colunas foram atualizadas em outra aba. Recarregue pra ver a versão mais recente antes de editar.',
+                colunas: colunasReais,
+                versao: versaoAtual,
+            }, { status: 409 })
+        }
+
+        const novaVersao = versaoAtual + 1
         await base('Clientes').update(record.id, {
             'kanban_colunas': JSON.stringify(colunas),
+            'kanban_colunas_versao': novaVersao,
         })
 
-        return NextResponse.json({ success: true })
+        return NextResponse.json({ success: true, versao: novaVersao })
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }

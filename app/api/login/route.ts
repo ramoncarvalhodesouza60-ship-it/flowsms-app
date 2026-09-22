@@ -32,6 +32,7 @@ export async function POST(request: Request) {
                 (pageRecords: any[], fetchNextPage: () => void) => {
                     pageRecords.forEach((record: any) => {
                         registroEncontrado = {
+                            id: record.id,
                             senhaSalva: record.get('senha'),
                             email: record.get('email'),
                             empresa: record.get('empresa'),

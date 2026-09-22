@@ -330,6 +330,7 @@ export default function Home() {
   const [atendenteCapacidade, setAtendenteCapacidade] = useState('10')
   const [atendenteSalvando, setAtendenteSalvando] = useState(false)
   const [atendenteErro, setAtendenteErro] = useState('')
+  const [atendenteEditandoId, setAtendenteEditandoId] = useState<string | null>(null)
   async function entrar() {
     setLoading(true)
     try {
@@ -707,6 +708,49 @@ export default function Home() {
         carregarAtendentes()
       } else {
         setAtendenteErro(data.error || 'Erro ao salvar atendente')
+      }
+    } catch (e: any) {
+      setAtendenteErro('Erro de conexão: ' + e.message)
+    }
+    setAtendenteSalvando(false)
+  }
+
+  function iniciarEdicaoAtendente(a: any) {
+    setAtendenteEditandoId(a.id)
+    setAtendenteNome(a.nome || '')
+    setAtendenteEmail(a.email || '')
+    setAtendenteSenha('')
+    setAtendenteCapacidade(String(a.capacidadeMaxima || 10))
+  }
+
+  function cancelarEdicaoAtendente() {
+    setAtendenteEditandoId(null)
+    setAtendenteNome(''); setAtendenteEmail(''); setAtendenteSenha(''); setAtendenteCapacidade('10')
+  }
+
+  async function salvarEdicaoAtendente() {
+    if (!atendenteNome.trim() || !atendenteEmail.trim() || !atendenteEditandoId) return
+    setAtendenteSalvando(true)
+    setAtendenteErro('')
+    try {
+      const corpo: any = {
+        id: atendenteEditandoId,
+        nome: atendenteNome,
+        email: atendenteEmail,
+        capacidadeMaxima: atendenteCapacidade,
+      }
+      if (atendenteSenha.trim()) corpo.senha = atendenteSenha
+      const res = await fetch('/api/atendentes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(corpo),
+      })
+      const data = await res.json()
+      if (data.success) {
+        cancelarEdicaoAtendente()
+        carregarAtendentes()
+      } else {
+        setAtendenteErro(data.error || 'Erro ao salvar edição')
       }
     } catch (e: any) {
       setAtendenteErro('Erro de conexão: ' + e.message)
@@ -1499,20 +1543,33 @@ export default function Home() {
                               <button onClick={() => alternarAtivoAtendente(a.id, a.ativo)} style={{ fontSize: '10px', padding: '4px 8px', borderRadius: '6px', border: 'none', cursor: 'pointer', background: a.ativo ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)', color: a.ativo ? '#22c55e' : 'rgba(255,255,255,0.3)', fontFamily: 'Inter, sans-serif' }}>
                                 {a.ativo ? 'Ativo' : 'Inativo'}
                               </button>
+                              <button onClick={() => iniciarEdicaoAtendente(a)} style={{ fontSize: '10px', padding: '4px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', background: 'transparent', color: 'rgba(255,255,255,0.4)', fontFamily: 'Inter, sans-serif' }}>
+                                Editar
+                              </button>
                               <button onClick={() => deletarAtendente(a.id)} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', fontSize: '12px' }}>✕</button>
                             </div>
                           </div>
                         ))}
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '12px' }}>
+                        {atendenteEditandoId && (
+                          <div style={{ fontSize: '11px', color: '#FF6B00', fontWeight: 700, marginTop: '14px', marginBottom: '4px' }}>✏️ Editando atendente</div>
+                        )}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: atendenteEditandoId ? '0' : '12px' }}>
                           <input className="inp-focus" placeholder="Nome" value={atendenteNome} onChange={e => setAtendenteNome(e.target.value)} style={{ ...inp, padding: '10px 12px', fontSize: '12px' }} />
                           <input className="inp-focus" placeholder="E-mail" value={atendenteEmail} onChange={e => setAtendenteEmail(e.target.value)} style={{ ...inp, padding: '10px 12px', fontSize: '12px' }} />
-                          <input className="inp-focus" type="password" placeholder="Senha" value={atendenteSenha} onChange={e => setAtendenteSenha(e.target.value)} style={{ ...inp, padding: '10px 12px', fontSize: '12px' }} />
+                          <input className="inp-focus" type="password" placeholder={atendenteEditandoId ? 'Nova senha (opcional)' : 'Senha'} value={atendenteSenha} onChange={e => setAtendenteSenha(e.target.value)} style={{ ...inp, padding: '10px 12px', fontSize: '12px' }} />
                           <input className="inp-focus" type="number" placeholder="Capacidade máx." value={atendenteCapacidade} onChange={e => setAtendenteCapacidade(e.target.value)} style={{ ...inp, padding: '10px 12px', fontSize: '12px' }} />
                         </div>
-                        <button onClick={criarAtendente} disabled={atendenteSalvando} style={{ width: '100%', marginTop: '8px', padding: '10px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '10px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}>
-                          {atendenteSalvando ? 'Adicionando...' : '+ Adicionar atendente'}
-                        </button>
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                          <button onClick={atendenteEditandoId ? salvarEdicaoAtendente : criarAtendente} disabled={atendenteSalvando} style={{ flex: 1, padding: '10px', background: atendenteEditandoId ? 'linear-gradient(135deg,#FF6B00,#ff8c33)' : 'rgba(255,255,255,0.04)', border: atendenteEditandoId ? 'none' : '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '10px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}>
+                            {atendenteSalvando ? 'Salvando...' : atendenteEditandoId ? '💾 Salvar edição' : '+ Adicionar atendente'}
+                          </button>
+                          {atendenteEditandoId && (
+                            <button onClick={cancelarEdicaoAtendente} style={{ padding: '10px 16px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)', borderRadius: '10px', fontSize: '12px', cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}>
+                              Cancelar
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </>
                   )}

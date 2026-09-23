@@ -30,9 +30,10 @@ export async function POST(request: NextRequest) {
         'tipo': 'sms',
         'horario': new Date().toISOString(),
         'empresa': empresa || '',
+        'id_sms': data?.id ? String(data.id) : '',
       })
 
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true, idSms: data?.id })
     }
 
     return NextResponse.json({ success: false, error: data?.descricao || 'Falha ao enviar SMS' })

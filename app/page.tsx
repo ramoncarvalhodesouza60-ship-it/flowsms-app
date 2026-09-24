@@ -1231,7 +1231,7 @@ export default function Home() {
                     </div>
 
                     <button onClick={executarDisparoSMS} disabled={smsDisparando || smsCSV.length === 0 || !smsMensagemMassa.trim()} style={{ background: smsDisparando ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg,#FF6B00,#ff8c33)', border: 'none', color: 'white', padding: '16px', borderRadius: '12px', fontSize: '15px', fontWeight: 700, cursor: (smsDisparando || smsCSV.length === 0) ? 'not-allowed' : 'pointer', fontFamily: 'Inter, sans-serif', opacity: smsCSV.length === 0 ? 0.4 : 1, boxShadow: smsCSV.length > 0 && !smsDisparando ? '0 4px 20px rgba(255,107,0,0.4)' : 'none' }}>
-                      {smsDisparando ? `Disparando... ${smsProgressoAtual}/${smsProgressoTotal}` : `🚀 Disparar para ${Math.min(smsQuantidade, disponiveisParaDisparoSafe(smsNovos.length))} contatos`}
+                      {smsDisparando ? `Disparando... ${smsProgressoAtual}/${smsProgressoTotal}` : `🚀 Disparar para ${Math.min(smsQuantidade, smsNovos.length)} contatos`}
                     </button>
 
                     {smsDisparando && <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '8px', height: '6px', overflow: 'hidden' }}><div style={{ background: 'linear-gradient(90deg,#FF6B00,#ff8c33)', height: '100%', width: `${smsProgressoTotal > 0 ? (smsProgressoAtual / smsProgressoTotal) * 100 : 0}%`, transition: 'width 0.3s', boxShadow: '0 0 10px rgba(255,107,0,0.5)' }} /></div>}

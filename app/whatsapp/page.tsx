@@ -133,6 +133,10 @@ function WhatsAppConteudo() {
     const [novaColunaLabel, setNovaColunaLabel] = useState('')
     const [mostrarRespostas, setMostrarRespostas] = useState(false)
     const [mostrarTags, setMostrarTags] = useState(false)
+    const [mostrarDenuncia, setMostrarDenuncia] = useState(false)
+    const [motivoDenuncia, setMotivoDenuncia] = useState('')
+    const [enviandoDenuncia, setEnviandoDenuncia] = useState(false)
+    const [contatosBloqueados, setContatosBloqueados] = useState<Set<string>>(new Set())
     const [tagsPorContato, setTagsPorContato] = useState<Record<string, string[]>>({})
     const [mostrarMidia, setMostrarMidia] = useState(false)
     const [gravandoAudio, setGravandoAudio] = useState(false)
@@ -557,6 +561,43 @@ function WhatsAppConteudo() {
 
             return { ...prev, [contatoId]: novas }
         })
+    }
+
+    async function toggleBloqueioContato(telefone: string) {
+        const estaBloqueado = contatosBloqueados.has(telefone)
+        try {
+            await fetch('/api/contatos/bloquear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telefone, empresa: empresaAtual, bloquear: !estaBloqueado }),
+            })
+            setContatosBloqueados(prev => {
+                const novo = new Set(prev)
+                if (estaBloqueado) novo.delete(telefone)
+                else novo.add(telefone)
+                return novo
+            })
+        } catch (e) {
+            console.error('Erro ao bloquear/desbloquear:', e)
+        }
+    }
+
+    async function enviarDenuncia() {
+        if (!conversaSelecionada || !motivoDenuncia.trim()) return
+        setEnviandoDenuncia(true)
+        try {
+            await fetch('/api/contatos/denunciar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telefone: conversaSelecionada.telefone, motivo: motivoDenuncia, empresa: empresaAtual }),
+            })
+            setMotivoDenuncia('')
+            setMostrarDenuncia(false)
+            alert('Registro salvo com sucesso.')
+        } catch (e) {
+            console.error('Erro ao denunciar:', e)
+        }
+        setEnviandoDenuncia(false)
     }
 
     // ===== FUNÇÕES DA TELA DE DISPAROS =====
@@ -996,6 +1037,10 @@ function WhatsAppConteudo() {
                                     </button>
                                 )}
                                 <button onClick={() => { setMostrarTags(!mostrarTags); setMostrarRespostas(false); setMostrarMidia(false) }} style={btnStyle(mostrarTags)}>🏷️ Tags</button>
+                                <button onClick={() => toggleBloqueioContato(conversaSelecionada.telefone)} style={{ ...btnStyle(contatosBloqueados.has(conversaSelecionada.telefone)), color: contatosBloqueados.has(conversaSelecionada.telefone) ? '#f38ba8' : undefined }}>
+                                    {contatosBloqueados.has(conversaSelecionada.telefone) ? '🔓 Desbloquear' : '🚫 Bloquear'}
+                                </button>
+                                <button onClick={() => { setMostrarDenuncia(!mostrarDenuncia); setMostrarTags(false); setMostrarMidia(false) }} style={btnStyle(mostrarDenuncia)}>⚠️ Denunciar</button>
                                 <button style={btnStyle()}>📞 Ligar</button>
                                 <button onClick={() => setIaAtiva(!iaAtiva)} style={{ ...btnStyle(iaAtiva), background: iaAtiva ? '#FF6B00' : '#1a1a1a', color: 'white' }}>
                                     {iaAtiva ? '🤖 IA ON' : '👤 Manual'}
@@ -1034,6 +1079,23 @@ function WhatsAppConteudo() {
                                         </button>
                                     )
                                 })}
+                            </div>
+                        )}
+
+                        {mostrarDenuncia && (
+                            <div style={{ padding: '10px 20px', background: '#0f0f0f', borderBottom: '1px solid #1e1e1e', display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+                                <span style={{ color: '#555', fontSize: '11px' }}>Motivo:</span>
+                                <input
+                                    value={motivoDenuncia}
+                                    onChange={e => setMotivoDenuncia(e.target.value)}
+                                    placeholder="Ex: mensagens abusivas, ameaças..."
+                                    onKeyDown={e => e.key === 'Enter' && enviarDenuncia()}
+                                    style={{ flex: 1, maxWidth: '320px', padding: '6px 12px', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '8px', color: 'white', fontSize: '12px', outline: 'none', fontFamily: 'Arial' }}
+                                />
+                                <button onClick={enviarDenuncia} disabled={enviandoDenuncia || !motivoDenuncia.trim()}
+                                    style={{ background: '#f38ba8', border: 'none', color: 'white', padding: '6px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '11px', fontWeight: 600, fontFamily: 'Arial', opacity: enviandoDenuncia || !motivoDenuncia.trim() ? 0.5 : 1 }}>
+                                    {enviandoDenuncia ? 'Salvando...' : 'Registrar'}
+                                </button>
                             </div>
                         )}
 

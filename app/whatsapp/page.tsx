@@ -137,6 +137,7 @@ function WhatsAppConteudo() {
     const [motivoDenuncia, setMotivoDenuncia] = useState('')
     const [enviandoDenuncia, setEnviandoDenuncia] = useState(false)
     const [contatosBloqueados, setContatosBloqueados] = useState<Set<string>>(new Set())
+    const [mostrarMenuAcoes, setMostrarMenuAcoes] = useState(false)
     const [tagsPorContato, setTagsPorContato] = useState<Record<string, string[]>>({})
     const [mostrarMidia, setMostrarMidia] = useState(false)
     const [gravandoAudio, setGravandoAudio] = useState(false)
@@ -1037,10 +1038,19 @@ function WhatsAppConteudo() {
                                     </button>
                                 )}
                                 <button onClick={() => { setMostrarTags(!mostrarTags); setMostrarRespostas(false); setMostrarMidia(false) }} style={btnStyle(mostrarTags)}>🏷️ Tags</button>
-                                <button onClick={() => toggleBloqueioContato(conversaSelecionada.telefone)} style={{ ...btnStyle(contatosBloqueados.has(conversaSelecionada.telefone)), color: contatosBloqueados.has(conversaSelecionada.telefone) ? '#f38ba8' : undefined }}>
-                                    {contatosBloqueados.has(conversaSelecionada.telefone) ? '🔓 Desbloquear' : '🚫 Bloquear'}
-                                </button>
-                                <button onClick={() => { setMostrarDenuncia(!mostrarDenuncia); setMostrarTags(false); setMostrarMidia(false) }} style={btnStyle(mostrarDenuncia)}>⚠️ Denunciar</button>
+                                <div style={{ position: 'relative' }}>
+                                    <button onClick={() => setMostrarMenuAcoes(!mostrarMenuAcoes)} style={btnStyle(mostrarMenuAcoes)}>⋮</button>
+                                    {mostrarMenuAcoes && (
+                                        <div onClick={() => setMostrarMenuAcoes(false)} style={{ position: 'absolute', top: '32px', right: 0, background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '8px', minWidth: '160px', zIndex: 20, overflow: 'hidden', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+                                            <button onClick={() => toggleBloqueioContato(conversaSelecionada.telefone)} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: 'transparent', border: 'none', color: contatosBloqueados.has(conversaSelecionada.telefone) ? '#22c55e' : '#f38ba8', fontSize: '12px', cursor: 'pointer', fontFamily: 'Arial', display: 'block' }}>
+                                                {contatosBloqueados.has(conversaSelecionada.telefone) ? '🔓 Desbloquear' : '🚫 Bloquear'}
+                                            </button>
+                                            <button onClick={() => setMostrarDenuncia(true)} style={{ width: '100%', textAlign: 'left', padding: '10px 14px', background: 'transparent', border: 'none', borderTop: '1px solid #2a2a2a', color: '#f9e2af', fontSize: '12px', cursor: 'pointer', fontFamily: 'Arial', display: 'block' }}>
+                                                ⚠️ Denunciar
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                                 <button style={btnStyle()}>📞 Ligar</button>
                                 <button onClick={() => setIaAtiva(!iaAtiva)} style={{ ...btnStyle(iaAtiva), background: iaAtiva ? '#FF6B00' : '#1a1a1a', color: 'white' }}>
                                     {iaAtiva ? '🤖 IA ON' : '👤 Manual'}

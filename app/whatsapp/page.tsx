@@ -366,6 +366,12 @@ function WhatsAppConteudo() {
     }, [mensagensRaw])
 
     useEffect(() => {
+        setMostrarDenuncia(false)
+        setMotivoDenuncia('')
+        setMostrarMenuAcoes(false)
+    }, [conversaSelecionada?.id])
+
+    useEffect(() => {
         if (empresaAtual) {
             fetch('/api/contatos/tags?empresa=' + encodeURIComponent(empresaAtual))
                 .then(r => r.json())

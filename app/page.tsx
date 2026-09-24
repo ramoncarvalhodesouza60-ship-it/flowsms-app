@@ -104,6 +104,14 @@ const statusColors: Record<string, { bg: string; color: string; dot: string }> =
   'Convertido': { bg: 'rgba(166,227,161,0.12)', color: '#a6e3a1', dot: '#a6e3a1' },
 }
 
+function corStatusSMS(status: string | undefined): { cor: string; label: string } {
+  if (!status) return { cor: '#666', label: 'Enviado' }
+  const s = status.toUpperCase()
+  if (s.includes('RECEBIDA') || s.includes('ENTREGUE')) return { cor: '#22c55e', label: 'Entregue' }
+  if (s.includes('FALHA') || s.includes('ERRO') || s.includes('REJEITADA')) return { cor: '#f38ba8', label: 'Falhou' }
+  return { cor: '#f9e2af', label: 'Enviado' }
+}
+
 type ContatoCSV = { nome: string; telefone: string }
 type ResultadoSMS = { telefone: string; sucesso: boolean; erro?: string }
 
@@ -261,7 +269,7 @@ export default function Home() {
   const [waEnviando, setWaEnviando] = useState(false)
   const [historicoSMS, setHistoricoSMS] = useState<Set<string>>(new Set())
   const [historicoWA, setHistoricoWA] = useState<Set<string>>(new Set())
-  const [smsSubAba, setSmsSubAba] = useState<'individual' | 'massa'>('individual')
+  const [smsSubAba, setSmsSubAba] = useState<'individual' | 'massa' | 'historico'>('individual')
   const [smsCSV, setSmsCSV] = useState<ContatoCSV[]>([])
   const [smsNomeArquivo, setSmsNomeArquivo] = useState('')
   const [smsMensagemMassa, setSmsMensagemMassa] = useState('')
@@ -274,6 +282,12 @@ export default function Home() {
   const [smsErroCampanha, setSmsErroCampanha] = useState<string | null>(null)
   const [mostrarListaSMS, setMostrarListaSMS] = useState(false)
   const inputSmsCSVRef = useRef<HTMLInputElement>(null)
+
+  // Estados do histórico de SMS com status de entrega
+  const [smsHistorico, setSmsHistorico] = useState<any[]>([])
+  const [smsHistoricoCarregando, setSmsHistoricoCarregando] = useState(false)
+  const [smsStatusPorId, setSmsStatusPorId] = useState<Record<string, string>>({})
+  const [smsConsultandoId, setSmsConsultandoId] = useState<string | null>(null)
 
   // Estados da aba IA / Assistente
   const [iaPrompt, setIaPrompt] = useState('')
@@ -478,6 +492,33 @@ export default function Home() {
   }
 
   function limparCampanhaSMS() { setSmsCSV([]); setSmsNomeArquivo(''); setSmsResultados([]); setSmsErroCampanha(null); setSmsProgressoAtual(0); setSmsProgressoTotal(0); setMostrarListaSMS(false) }
+
+  async function carregarHistoricoSMS() {
+    setSmsHistoricoCarregando(true)
+    try {
+      const res = await fetch('/api/sms/mensagens?empresa=' + encodeURIComponent(empresaAtual))
+      const data = await res.json()
+      if (data.success) setSmsHistorico(data.mensagens)
+    } catch (e) { console.error(e) }
+    setSmsHistoricoCarregando(false)
+  }
+
+  async function consultarStatusSMS(idSms: string) {
+    setSmsConsultandoId(idSms)
+    try {
+      const res = await fetch('/api/sms/status?id=' + idSms + '&empresa=' + encodeURIComponent(empresaAtual))
+      const data = await res.json()
+      if (data.success) {
+        setSmsStatusPorId(prev => ({ ...prev, [idSms]: data.status?.descricao || 'DESCONHECIDO' }))
+      }
+    } catch (e) { console.error(e) }
+    setSmsConsultandoId(null)
+  }
+
+  useEffect(() => {
+    if (logado && empresaAtual && abaAtiva === 'sms' && smsSubAba === 'historico') carregarHistoricoSMS()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logado, empresaAtual, abaAtiva, smsSubAba])
 
   async function salvarPrompt() {
     if (!configEmpresa?.id) { setIaStatus('❌ Cliente sem ID identificado'); return }
@@ -1123,6 +1164,9 @@ export default function Home() {
                     <button onClick={() => setSmsSubAba('massa')} style={{ padding: '6px 16px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 600, background: smsSubAba === 'massa' ? 'linear-gradient(135deg,#FF6B00,#ff8c33)' : 'transparent', color: smsSubAba === 'massa' ? 'white' : 'rgba(255,255,255,0.3)', fontFamily: 'Inter, sans-serif', boxShadow: smsSubAba === 'massa' ? '0 2px 8px rgba(255,107,0,0.3)' : 'none' }}>
                       🚀 Disparo em Massa
                     </button>
+                    <button onClick={() => setSmsSubAba('historico')} style={{ padding: '6px 16px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 600, background: smsSubAba === 'historico' ? 'linear-gradient(135deg,#FF6B00,#ff8c33)' : 'transparent', color: smsSubAba === 'historico' ? 'white' : 'rgba(255,255,255,0.3)', fontFamily: 'Inter, sans-serif', boxShadow: smsSubAba === 'historico' ? '0 2px 8px rgba(255,107,0,0.3)' : 'none' }}>
+                      📋 Histórico
+                    </button>
                   </div>
                 </div>
 
@@ -1158,9 +1202,14 @@ export default function Home() {
                           </div>
                           {mostrarListaSMS && smsRepetidos.length > 0 && (
                             <div style={{ background: 'rgba(255,107,0,0.04)', border: '1px solid rgba(255,107,0,0.15)', borderRadius: '8px', padding: '10px', maxHeight: '140px', overflowY: 'auto' }}>
-                              <div style={{ color: '#FF6B00', fontSize: '11px', fontWeight: 600, marginBottom: '6px' }}>Já receberam anteriormente:</div>
-                              {smsRepetidos.map((c, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: '11px', borderBottom: '1px solid rgba(255,107,0,0.06)' }}><span style={{ color: '#666' }}>{c.nome}</span><span style={{ color: '#FF6B00', fontFamily: 'monospace' }}>{c.telefone}</span></div>)}
-                              <div style={{ color: '#555', fontSize: '10px', marginTop: '6px' }}>Pode disparar mesmo assim.</div>
+                              <div style={{ color: '#FF6B00', fontSize: '11px', fontWeight: 700, marginBottom: '6px' }}>⚠️ Estes números já receberam disparo anteriormente:</div>
+                              {smsRepetidos.map((c, i) => (
+                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid rgba(255,107,0,0.08)', fontSize: '11px' }}>
+                                  <span style={{ color: '#888' }}>{c.nome !== c.telefone ? c.nome : ''}</span>
+                                  <span style={{ color: '#FF6B00', fontFamily: 'monospace' }}>{c.telefone}</span>
+                                </div>
+                              ))}
+                              <div style={{ color: '#666', fontSize: '10px', marginTop: '8px' }}>Você pode disparar mesmo assim se quiser.</div>
                             </div>
                           )}
                         </div>
@@ -1182,7 +1231,7 @@ export default function Home() {
                     </div>
 
                     <button onClick={executarDisparoSMS} disabled={smsDisparando || smsCSV.length === 0 || !smsMensagemMassa.trim()} style={{ background: smsDisparando ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg,#FF6B00,#ff8c33)', border: 'none', color: 'white', padding: '16px', borderRadius: '12px', fontSize: '15px', fontWeight: 700, cursor: (smsDisparando || smsCSV.length === 0) ? 'not-allowed' : 'pointer', fontFamily: 'Inter, sans-serif', opacity: smsCSV.length === 0 ? 0.4 : 1, boxShadow: smsCSV.length > 0 && !smsDisparando ? '0 4px 20px rgba(255,107,0,0.4)' : 'none' }}>
-                      {smsDisparando ? `Disparando... ${smsProgressoAtual}/${smsProgressoTotal}` : `🚀 Disparar para ${Math.min(smsQuantidade, smsCSV.length)} contatos`}
+                      {smsDisparando ? `Disparando... ${smsProgressoAtual}/${smsProgressoTotal}` : `🚀 Disparar para ${Math.min(smsQuantidade, disponiveisParaDisparoSafe(smsNovos.length))} contatos`}
                     </button>
 
                     {smsDisparando && <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '8px', height: '6px', overflow: 'hidden' }}><div style={{ background: 'linear-gradient(90deg,#FF6B00,#ff8c33)', height: '100%', width: `${smsProgressoTotal > 0 ? (smsProgressoAtual / smsProgressoTotal) * 100 : 0}%`, transition: 'width 0.3s', boxShadow: '0 0 10px rgba(255,107,0,0.5)' }} /></div>}
@@ -1196,6 +1245,54 @@ export default function Home() {
                         <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
                           {smsResultados.map((r, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 2px', borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '11px' }}><span style={{ color: 'rgba(255,255,255,0.3)' }}>{r.telefone}</span><span style={{ color: r.sucesso ? '#22c55e' : '#f38ba8' }}>{r.sucesso ? '✓' : '✗ ' + (r.erro || '')}</span></div>)}
                         </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {smsSubAba === 'historico' && (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                      <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px' }}>
+                        Clique em "Consultar" pra ver se o SMS foi entregue de verdade no celular do cliente.
+                      </p>
+                      <button onClick={carregarHistoricoSMS} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '11px', fontFamily: 'Inter, sans-serif' }}>
+                        🔄 Atualizar
+                      </button>
+                    </div>
+
+                    {smsHistoricoCarregando && <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px', padding: '30px', textAlign: 'center' }}>Carregando histórico...</div>}
+
+                    {!smsHistoricoCarregando && smsHistorico.length === 0 && (
+                      <div style={{ padding: '40px', textAlign: 'center', color: 'rgba(255,255,255,0.15)', fontSize: '14px' }}>Nenhum SMS enviado ainda</div>
+                    )}
+
+                    {!smsHistoricoCarregando && smsHistorico.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {smsHistorico.map((m: any) => {
+                          const statusAtual = m.idSms ? smsStatusPorId[m.idSms] : undefined
+                          const { cor, label } = corStatusSMS(statusAtual)
+                          return (
+                            <div key={m.id} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                              <div style={{ minWidth: 0, flex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: cor, flexShrink: 0 }} />
+                                  <span style={{ color: 'white', fontSize: '13px', fontWeight: 600, fontFamily: 'monospace' }}>{m.telefone}</span>
+                                  <span style={{ fontSize: '10px', color: cor, fontWeight: 700, textTransform: 'uppercase' }}>{label}</span>
+                                </div>
+                                <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.mensagem}</div>
+                                <div style={{ color: 'rgba(255,255,255,0.15)', fontSize: '10px', marginTop: '2px' }}>{m.horario ? new Date(m.horario).toLocaleString('pt-BR') : ''}</div>
+                              </div>
+                              {m.idSms ? (
+                                <button onClick={() => consultarStatusSMS(m.idSms)} disabled={smsConsultandoId === m.idSms} style={{ background: 'rgba(255,107,0,0.08)', border: '1px solid rgba(255,107,0,0.2)', color: '#FF6B00', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '11px', fontWeight: 600, fontFamily: 'Inter, sans-serif', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                                  {smsConsultandoId === m.idSms ? '...' : 'Consultar'}
+                                </button>
+                              ) : (
+                                <span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '10px', flexShrink: 0 }}>sem ID</span>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
                   </div>

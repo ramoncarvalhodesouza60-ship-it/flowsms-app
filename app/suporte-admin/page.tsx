@@ -18,16 +18,29 @@ export default function SuporteAdmin() {
     const [ticketSelecionado, setTicketSelecionado] = useState<Ticket | null>(null)
     const [novaMensagem, setNovaMensagem] = useState('')
     const [carregando, setCarregando] = useState(true)
+    const [acessoNegado, setAcessoNegado] = useState(false)
     const [filtroStatus, setFiltroStatus] = useState<'Todos' | 'Aberto' | 'Em atendimento' | 'Resolvido'>('Todos')
     const pollingRef = useRef<NodeJS.Timeout | null>(null)
 
     async function carregarTickets() {
         try {
             const res = await fetch('/api/tickets-suporte')
+
+            if (res.status === 401) {
+                if (pollingRef.current) clearInterval(pollingRef.current)
+                window.location.href = '/'
+                return
+            }
+            if (res.status === 403) {
+                if (pollingRef.current) clearInterval(pollingRef.current)
+                setAcessoNegado(true)
+                setCarregando(false)
+                return
+            }
+
             const data = await res.json()
             if (data.tickets) {
                 setTickets(data.tickets)
-                // Atualiza o ticket selecionado também, se ainda estiver aberto
                 if (ticketSelecionado) {
                     const atualizado = data.tickets.find((t: Ticket) => t.id === ticketSelecionado.id)
                     if (atualizado) setTicketSelecionado(atualizado)
@@ -53,7 +66,6 @@ export default function SuporteAdmin() {
         const texto = novaMensagem
         setNovaMensagem('')
 
-        // Atualização otimista
         setTicketSelecionado(prev =>
             prev
                 ? { ...prev, mensagens: [...prev.mensagens, { remetente: 'atendente', texto, data: new Date().toISOString() }] }
@@ -90,6 +102,15 @@ export default function SuporteAdmin() {
         if (status === 'Aberto') return '#FF6B00'
         if (status === 'Em atendimento') return '#f9e2af'
         return '#22c55e'
+    }
+
+    if (acessoNegado) {
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0a0a0a', color: '#888', fontFamily: 'Arial', gap: '10px' }}>
+                <div style={{ fontSize: '15px', color: '#FF6B00', fontWeight: 700 }}>Acesso negado</div>
+                <div style={{ fontSize: '13px' }}>Esse painel é exclusivo para o administrador do FlowSMS.</div>
+            </div>
+        )
     }
 
     if (carregando) {
